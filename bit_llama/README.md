@@ -9,7 +9,7 @@ TinyStoriesデータセットを用いて、「物語を語る能力」の獲得
 ## 📂 成果物ファイル一覧
 
 ### 1. **コアエンジン (脳の構造)**
-*   **ファイル**: `rust_llm_test/src/core_engine.rs`
+*   **ファイル**: `src/core_engine.rs`
 *   **進化点**:
     *   `BitLlama` 構造体の実装（Embedding -> N層 -> Head）。
     *   `TTTLayer` のバッチ処理対応（`B, T, D`）。
@@ -24,7 +24,7 @@ TinyStoriesデータセットを用いて、「物語を語る能力」の獲得
     *   Rustでの高速読み込み用に `u16` バイナリ形式 (`train.bin`) へ変換。
 
 ### 3. **学習スクリプト (脳の育成)**
-*   **ファイル**: `rust_llm_test/src/bin/train_llama.rs`
+*   **ファイル**: `src/bin/train_llama.rs`
 *   **機能**:
     *   **GPUバッチ学習**: `BATCH_SIZE=32` で8GB VRAMに最適化。
     *   **チェックポイント機能**: 10ステップごとに自動保存し、中断・再開が可能。
@@ -35,15 +35,38 @@ TinyStoriesデータセットを用いて、「物語を語る能力」の獲得
     ```
 
 ### 4. **推論スクリプト (おしゃべり)**
-*   **ファイル**: `rust_llm_test/src/bin/inference_llama.rs`
-*   **機能**:
-    *   学習済み重み (`bit_llama_checkpoint.safetensors`) の読み込み。
-    *   **CPU推論モード**: 手軽に実行できるようCPUモードをデフォルト化。
-    *   対話型プロンプトでのテキスト生成。
-*   **コマンド**:
-    ```cmd
-    cargo run --release --bin inference_llama
-    ```
+*   **ファイル**: `src/bin/inference_llama.rs`
+*   **機能**: 学習済み重みを読み込み、対話形式でテキスト生成を行います。
+
+---
+
+## 🛠️ How to Run (実行手順)
+
+```bash
+# 1. Data Prep (教材の準備)
+# TinyStoriesのダウンロードとトークナイザ作成を行います
+cd data_prep
+python prepare_tinystories.py
+cd ..
+
+# 2. Train (学習)
+# GPU(CUDA)を使用して学習を開始します
+cargo run --release --features cuda --bin train_llama
+
+# 3. Inference (推論)
+# 学習したモデルと会話します (CPUモードで動作)
+cargo run --release --bin inference_llama
+```
+
+## 🧠 Model Specs (モデル仕様)
+
+| Item | Specification | Note |
+|---|---|---|
+| **Architecture** | **Stack-Bit-TTT** | 1.58-bit BitNet + TTT (Test-Time Training) |
+| **Components** | RMSNorm / SwiGLU / Residual | Modern Llama-like blocks |
+| **Size** | **~11.7 M Params** | TinyStories Specialized (D=256, L=4) |
+| **Quantization** | **1.58-bit** (Ternary) | Weights are `{-1, 0, 1}` |
+| **Training** | **Hybrid (GPU/CPU)** | Train on CUDA, Infer on CPU |
 
 ---
 
