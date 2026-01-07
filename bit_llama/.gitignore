@@ -1,0 +1,16 @@
+
+# Build Artifacts
+/target
+Cargo.lock
+
+# Binary Data
+*.safetensors
+*.bin
+*.exe
+
+# Logs
+*.txt
+*.log
+
+# Data
+/data

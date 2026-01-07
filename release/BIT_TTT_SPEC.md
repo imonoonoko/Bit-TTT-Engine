@@ -1,6 +1,6 @@
 # Bit-TTT (Bitwise Test-Time Training) Architecture Specification
 
-**Status**: Prototype Completed (Phase 1-5)
+**Status**: Research & Development (Phase 13 - Bit-Llama Construction)
 **Engine**: Rust (Generic DLL via C-ABI)
 **Performance**: ~60,000 TPS (Tokens Per Second) on CPU
 
@@ -61,4 +61,25 @@ Tested on Standard Consumer CPU (Rust Engine Release Build):
 *   [x] **Phase 3**: Generic Library (DLL) Packaging
 *   [x] **Phase 4**: SIMD/AVX Optimization
 *   [x] **Phase 5**: Python Binding & Performance Benchmark
-*   [ ] **Phase 6**: Integration into real-world applications (e.g., Unity Chatbot, Local LLM Assistant).
+*   [x] **Phase 6**: GPU Support (Candle Integration)
+*   [x] **Phase 13**: "Bit-Llama" (Stacked Architecture & LLM Training)
+
+## 6. Bit-Llama Architecture (Phase 13)
+
+**Bit-Llama** represents the evolution of Bit-TTT from a single-layer test module to a full-fledged Language Model architecture.
+
+### 6.1 Structure
+*   **Deep Stacking**: Stacks multiple `TTTLayer` blocks (e.g., 4 to 12 layers) to learn complex hierarchical patterns.
+*   **SwiGLU MLP**: Incorporates a **SwiGLU (SiLU Gated Linear Unit)** Feed-Forward Network after each TTT layer, similar to Llama 3, to enhance non-linear expressivity.
+*   **RMSNorm**: Replaces standard LayerNorm for better stability in deep networks.
+*   **Residual Connections**: `x = x + Layer(Norm(x))` structure ensures gradient flow during deep training.
+
+### 6.2 Training Capability
+*   **Hybrid Backend**: Leverages `Candle` (HuggingFace Rust) to support both **CPU** (Inference) and **CUDA** (Training).
+*   **Batch Training**: Implements batch processing for `(Batch, Seq, Dim)` tensors, enabling efficient GPU saturation.
+*   **BPTT (Backpropagation Through Time)**: Unrolls the TTT recurrent loop during training to optimize the "learning rule" ($W_{state}$ update mechanics) itself.
+
+### 6.3 Performance
+*   **Data**: Trained on **TinyStories** dataset.
+*   **Result**: Successfully generates coherent English text from a `256 dim, 4 layer` model.
+*   **Efficiency**: Inference remains CPU-friendly, maintaining high throughput.

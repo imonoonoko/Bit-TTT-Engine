@@ -16,6 +16,11 @@
 *   **Adaptive Memory**: Updates its internal state in real-time for every input token (online learning).
 *   **Portable**: Distributed as a standard generic DLL/Shared Library (`release/Bit_TTT.dll`), usable from Python, C#, Unity, C++, etc.
 
+## Project Components
+- **[`bit_llama/`](bit_llama/)**: (New!) Pure Rust implementation of "Bit-Llama" (Stacked Bit-TTT). Supports GPU training and TinyStories generation.
+- **[`rust_engine/`](rust_engine/)**: Core logic optimized for C-ABI (DLL generation).
+- **[`python_proto/`](python_proto/)**: Original Python prototype for research.
+
 ## Contents
 *   `release/Bit_TTT.dll`: The core engine library.
 *   `release/benchmark.py`: Python script for verification and benchmarking.
@@ -70,6 +75,11 @@ void ttt_destroy(void* model);
 *   **爆速**: `i8` 整数演算とAVX2/AVX-512命令セットにより最適化されています。
 *   **学習する記憶**: 入力トークンを受け取るたびに、内部のニューラルネットをリアルタイムで更新（学習）します。
 *   **ポータブル**: 汎用的な DLL (`release/Bit_TTT.dll`) として提供されるため、Python, Unity (C#), C++, Node.js などあらゆる環境から利用可能です。
+
+## プロジェクト構成
+- **[`bit_llama/`](bit_llama/)**: (New!) "Bit-Llama" (多層化Bit-TTT) のPure Rust実装。GPU学習とTinyStories生成に対応しています。
+- **[`rust_engine/`](rust_engine/)**: C-ABI (DLL生成) に最適化されたコアロジックです。
+- **[`python_proto/`](python_proto/)**: 研究用の初期Pythonプロトタイプです。
 
 ## 同梱物 (release/ フォルダ内)
 *   `release/Bit_TTT.dll`: エンジン本体。

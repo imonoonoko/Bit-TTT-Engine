@@ -1,0 +1,20 @@
+[package]
+name = "bit_llama"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+candle-core = { version = "0.8.0" }
+candle-nn = { version = "0.8.0" }
+tokenizers = { version = "0.22", features = ["http"] }
+rand = "0.8"
+# ndarray = "0.15"
+
+# Import our local Bit-TTT engine
+# Note: We point to the local rust_engine folder
+cortex_rust = { path = "../rust_engine" }
+
+[features]
+default = []
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
