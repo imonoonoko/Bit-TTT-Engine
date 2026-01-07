@@ -9,7 +9,7 @@
 # 🇬🇧 English: Bit-TTT Engine
 
 ## Overview
-**Cortex Rust Engine** is a high-performance implementation of the Bit-TTT architecture. It combines **1.58-bit quantization efficiency** with **Test-Time Training (TTT)** adaptability. It runs entirely on the CPU using optimized integer arithmetic and SIMD/AVX instructions, achieving extreme throughput (~60,000 TPS).
+**Bit-TTT Engine** is a high-performance implementation of the Bit-TTT architecture. It combines **1.58-bit quantization efficiency** with **Test-Time Training (TTT)** adaptability. It runs entirely on the CPU using optimized integer arithmetic and SIMD/AVX instructions, achieving extreme throughput (~60,000 TPS).
 
 ## Features
 *   **Ultra Fast**: Optimizes matrix operations using `i8` integers and AVX2/AVX-512 instructions.
@@ -63,7 +63,7 @@ void ttt_destroy(void* model);
 # 🇯🇵 日本語: Bit-TTT 脳エンジン
 
 ## 概要
-**Cortex Rust Engine** は、Bit-TTTアーキテクチャの高性能実装版です。**1.58bit量子化による効率性**と、**Test-Time Training (推論時学習) による適応性**を兼ね備えています。
+**Bit-TTT Engine** は、Bit-TTTアーキテクチャの高性能実装版です。**1.58bit量子化による効率性**と、**Test-Time Training (推論時学習) による適応性**を兼ね備えています。
 完全にCPU上で動作し、SIMD/AVX命令を駆使した整数演算により、一般的なPCで **約60,000 TPS (トークン/秒)** という驚異的な推論速度を実現します。
 
 ## 特徴
