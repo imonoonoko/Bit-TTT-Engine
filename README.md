@@ -11,6 +11,8 @@
 ## Overview
 **Bit-TTT Engine** is a high-performance implementation of the Bit-TTT architecture. It combines **1.58-bit quantization efficiency** with **Test-Time Training (TTT)** adaptability. It runs entirely on the CPU using optimized integer arithmetic and SIMD/AVX instructions, achieving extreme throughput (~60,000 TPS).
 
+🚀 **New Phase (Phase 13):** Check out **[`bit_llama/`](bit_llama/)** for a full Language Model implementation ("Bit-Llama") capable of GPU training and text generation!
+
 ## Features
 *   **Ultra Fast**: Optimizes matrix operations using `i8` integers and AVX2/AVX-512 instructions.
 *   **Adaptive Memory**: Updates its internal state in real-time for every input token (online learning).
@@ -26,7 +28,11 @@
 *   `release/benchmark.py`: Python script for verification and benchmarking.
 *   `release/BIT_TTT_SPEC.md`: Technical specification document.
 
-## Quick Start (Python)
+## Quick Start (Python Benchmark)
+
+> **Want to train an LLM?**  
+> Go to **[`bit_llama/README.md`](bit_llama/README.md)** for instructions on training "Bit-Llama" on TinyStories.
+> The steps below are for verifying the core C-ABI engine.
 
 ### Requirements
 *   Python 3.x
@@ -71,6 +77,8 @@ void ttt_destroy(void* model);
 **Bit-TTT Engine** は、Bit-TTTアーキテクチャの高性能実装版です。**1.58bit量子化による効率性**と、**Test-Time Training (推論時学習) による適応性**を兼ね備えています。
 完全にCPU上で動作し、SIMD/AVX命令を駆使した整数演算により、一般的なPCで **約60,000 TPS (トークン/秒)** という驚異的な推論速度を実現します。
 
+🚀 **新機能 (Phase 13):**  **[`bit_llama/`](bit_llama/)** ディレクトリにて、完全な言語モデル実装（Bit-Llama）を公開しました！ GPU学習と文章生成が可能です。
+
 ## 特徴
 *   **爆速**: `i8` 整数演算とAVX2/AVX-512命令セットにより最適化されています。
 *   **学習する記憶**: 入力トークンを受け取るたびに、内部のニューラルネットをリアルタイムで更新（学習）します。
@@ -86,7 +94,11 @@ void ttt_destroy(void* model);
 *   `release/benchmark.py`: 動作確認およびベンチマーク用スクリプト。
 *   `release/BIT_TTT_SPEC.md`: 技術仕様書。
 
-## クイックスタート (Python)
+## クイックスタート (Python ベンチマーク)
+
+> **LLMを学習させたい場合**  
+> **[`bit_llama/README.md`](bit_llama/README.md)** をご覧ください。「Bit-Llama」の学習手順（TinyStories使用）を詳述しています。
+> 以下は、C言語連携用コアエンジンの動作確認手順です。
 
 ### 必要なもの
 *   Python 3.x
