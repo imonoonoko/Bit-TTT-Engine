@@ -1,0 +1,20 @@
+# Rust
+rust_engine/target/
+**/*.rs.bk
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Allow the release artifacts (packaged DLL is intended to be shared here)
+!release/Bit_TTT.dll
