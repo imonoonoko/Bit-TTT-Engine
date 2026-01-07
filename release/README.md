@@ -69,10 +69,10 @@ void ttt_destroy(void* model);
 ## 特徴
 *   **爆速**: `i8` 整数演算とAVX2/AVX-512命令セットにより最適化されています。
 *   **学習する記憶**: 入力トークンを受け取るたびに、内部のニューラルネットをリアルタイムで更新（学習）します。
-*   **ポータブル**: 汎用的な DLL (`cortex_rust.dll`) として提供されるため、Python, Unity (C#), C++, Node.js などあらゆる環境から利用可能です。
+*   **ポータブル**: 汎用的な DLL (`Bit_TTT.dll`) として提供されるため、Python, Unity (C#), C++, Node.js などあらゆる環境から利用可能です。
 
 ## 同梱物
-*   `cortex_rust.dll`: エンジン本体。
+*   `Bit_TTT.dll`: エンジン本体。
 *   `benchmark.py`: 動作確認およびベンチマーク用スクリプト。
 *   `BIT_TTT_SPEC.md`: 技術仕様書。
 
@@ -114,4 +114,4 @@ void ttt_destroy(void* model);
 ```
 
 ---
-*Created by Antigravity Agent for Project Bit-TTT.*
+*Created by Project Bit-TTT.*

@@ -14,7 +14,7 @@
 ## Features
 *   **Ultra Fast**: Optimizes matrix operations using `i8` integers and AVX2/AVX-512 instructions.
 *   **Adaptive Memory**: Updates its internal state in real-time for every input token (online learning).
-*   **Portable**: Distributed as a standard generic DLL/Shared Library (`Bit_TTT.dll`), usable from Python, C#, Unity, C++, etc.
+*   **Portable**: Distributed as a standard generic DLL/Shared Library (`release/Bit_TTT.dll`), usable from Python, C#, Unity, C++, etc.
 
 ## Contents
 *   `release/Bit_TTT.dll`: The core engine library.
@@ -28,7 +28,7 @@
 *   (Optional) `numpy`
 
 ### Running the Benchmark
-You can verify the memory effect and speed immediately by running the included script from the root directory:
+You can verify the memory effect and speed immediately by running the included script:
 
 ```bash
 python release/benchmark.py
@@ -69,12 +69,12 @@ void ttt_destroy(void* model);
 ## 特徴
 *   **爆速**: `i8` 整数演算とAVX2/AVX-512命令セットにより最適化されています。
 *   **学習する記憶**: 入力トークンを受け取るたびに、内部のニューラルネットをリアルタイムで更新（学習）します。
-*   **ポータブル**: 汎用的な DLL (`cortex_rust.dll`) として提供されるため、Python, Unity (C#), C++, Node.js などあらゆる環境から利用可能です。
+*   **ポータブル**: 汎用的な DLL (`release/Bit_TTT.dll`) として提供されるため、Python, Unity (C#), C++, Node.js などあらゆる環境から利用可能です。
 
 ## 同梱物 (release/ フォルダ内)
-*   `Bit_TTT.dll`: エンジン本体。
-*   `benchmark.py`: 動作確認およびベンチマーク用スクリプト。
-*   `BIT_TTT_SPEC.md`: 技術仕様書。
+*   `release/Bit_TTT.dll`: エンジン本体。
+*   `release/benchmark.py`: 動作確認およびベンチマーク用スクリプト。
+*   `release/BIT_TTT_SPEC.md`: 技術仕様書。
 
 ## クイックスタート (Python)
 
@@ -114,4 +114,4 @@ void ttt_destroy(void* model);
 ```
 
 ---
-*Created by Antigravity Agent for Project Bit-TTT.*
+*Created by Project Bit-TTT.*
