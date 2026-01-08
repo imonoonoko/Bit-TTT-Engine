@@ -166,12 +166,13 @@ fn main() -> Result<()> {
 
         // Input: (B, T). We iterate t.
         for t in 0..CONTEXT_LEN {
+            // Forward Pass
             let input_col = inputs.narrow(1, t, 1)?.squeeze(1)?.contiguous()?; // (B)
             let target_col = targets.narrow(1, t, 1)?.squeeze(1)?.contiguous()?; // (B)
 
             let mut h = model.embedding.forward(&input_col)?; // (B, D)
 
-            // Pass through layers
+            // Pass through layers (TTT Update + Residual)
             for (l_idx, layer) in model.layers.iter().enumerate() {
                 let (h_new, w_new) = layer.forward(&h, &w_states[l_idx])?;
                 h = h_new;
