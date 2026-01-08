@@ -13,7 +13,7 @@
 
 📘 **[Read the Architecture Design](ARCHITECTURE.md)** to understand the core philosophy.
 
-🚀 **New Phase (Phase 13):** Check out **[`bit_llama/`](bit_llama/)** for a full Language Model implementation ("Bit-Llama") capable of GPU training and text generation!
+
 
 ## Features
 *   **Ultra Fast**: Optimizes matrix operations using `i8` integers and AVX2/AVX-512 instructions.
