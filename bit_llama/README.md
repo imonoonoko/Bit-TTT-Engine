@@ -86,7 +86,7 @@ Bit-TTT Engine は Python から DLL (`.so`/`.dylib`) として直接呼び出�
 ---
 
 ## 📊 現状のステータス (Metrics)
-*   **Training Speed**: ~800 tokens/sec (RTX 3060 Mobile)
+*   **Training Speed**: ~800 tokens/sec (RTX 4060 Ti)
 *   **Loss Curve**: Smooth convergence observed at Step 150 (Loss: 4.15).
 *   **Generation**: "Always" -> "Alice" -> "Alice was very tired..." (Context learning observed).
 
