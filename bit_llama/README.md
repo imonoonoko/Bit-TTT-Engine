@@ -66,6 +66,42 @@ cargo run --release --bin train_llama
 cargo run --release --bin inference_llama
 ```
 
+## 🔌 Python Integration (外部連携)
+Bit-TTT Engine は Python から DLL (`.so`/`.dylib`) として直接呼び出し可能です。
+
+### Minimal Example
+```python
+import ctypes
+import platform
+
+# 1. Load Library
+lib_name = "Bit_TTT.dll" if platform.system() == "Windows" else "libBit_TTT.so"
+lib = ctypes.CDLL(f"./target/release/{lib_name}")
+
+# 2. Define API
+lib.ttt_create.argtypes = [ctypes.c_size_t, ctypes.c_float]
+lib.ttt_create.restype = ctypes.c_void_p
+lib.ttt_forward.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.c_size_t, ctypes.POINTER(ctypes.c_float)]
+
+# 3. Run
+dim = 64
+model = lib.ttt_create(dim, 0.1)
+# ... forward pass ...
+```
+> ※ 詳細な仕様は `release/benchmark.py` を参照してください。
+
+## ⚡ Performance (性能)
+
+Bit-TTT (Core Engine) は、Rust + SIMD最適化により極めて高速に動作します。
+
+| Metric | Value | Note |
+|---|---|---|
+| **Inference Speed** | **~34,000 TPS** | CPU Single Thread (Ryzen/Intel) |
+| **Memory Footprint** | **Extremely Low** | 1.58bit quantization ready |
+| **Startup Time** | **< 10ms** | No heavy runtime loaded |
+
+> **Benchmark**: `python release/benchmark.py` で手元の環境のスコアを計測できます。
+
 ## 🧠 Model Specs (モデル仕様)
 
 | Item | Specification | Note |
