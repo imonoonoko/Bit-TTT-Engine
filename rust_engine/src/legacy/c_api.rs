@@ -1,4 +1,4 @@
-use crate::TTTLayer;
+use super::ttt_layer::TTTLayer;
 use ndarray::ArrayView2;
 use std::slice;
 

@@ -1,4 +1,4 @@
-use crate::bit_linear::BitLinear;
+use super::bit_linear::BitLinear;
 use ndarray::{Array1, Array2, ArrayView2};
 
 pub struct TTTLayer {
