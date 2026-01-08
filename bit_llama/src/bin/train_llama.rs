@@ -279,12 +279,12 @@ fn main() -> Result<()> {
             println!("Step {:4} | Loss: {:.4}", step, val);
         }
 
-        // 🏆 Best Model Saving
-        if val < best_loss {
+        // 🏆 Best Model Saving (Check every 50 steps to reduce SSD writes)
+        if step % 50 == 0 && step > 0 && val < best_loss {
             best_loss = val;
             println!(
-                "🏆 New best loss: {:.4} - Saving model_best.safetensors",
-                val
+                "🏆 New best loss: {:.4} (Step {}) - Saving model_best.safetensors",
+                val, step
             );
             varmap.save("model_best.safetensors")?;
         }
