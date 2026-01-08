@@ -46,3 +46,13 @@ jobs:
       - name: Run Clippy
         run: cargo clippy -- -D warnings
         working-directory: ./Bit-TTT/rust_engine
+
+      - name: Install cargo-audit
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-audit
+
+      - name: Security Audit
+        run: cargo audit
+        working-directory: ./Bit-TTT/rust_engine

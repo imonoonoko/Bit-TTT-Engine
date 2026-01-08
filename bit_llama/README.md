@@ -91,6 +91,15 @@ model = lib.ttt_create(dim, 0.1)
 ```
 > ※ 詳細な仕様は `release/benchmark.py` を参照してください。
 
+### C-ABI Error Codes
+
+| Code | Name | Description |
+|---|---|---|
+| **0** | `Ok` | Success |
+| **1** | `NullPointer` | Input pointer was null |
+| **2** | `DimensionMismatch` | Input array size validation failed |
+| **99** | `Panic` | Internal Rust panic caught (Safety net) |
+
 ## ⚡ Performance (性能)
 
 Bit-TTT (Core Engine) は、Rust + SIMD最適化により極めて高速に動作します。
