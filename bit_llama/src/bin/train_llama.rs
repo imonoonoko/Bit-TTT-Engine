@@ -76,7 +76,7 @@ fn main() -> Result<()> {
     println!("Device: {:?}", device);
 
     // 1. Data
-    let data_path = "../data/TinyStories/train.bin";
+    let data_path = "data/TinyStories/train.bin";
     if !Path::new(data_path).exists() {
         anyhow::bail!("Data not found: {}", data_path);
     }
@@ -92,12 +92,29 @@ fn main() -> Result<()> {
     };
 
     let mut varmap = VarMap::new();
+    // 1. Init Model first (populates varmap with random weights)
+    let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
+    let model = BitLlama::load(config, vb)?;
+
+    // 2. Overwrite with Checkpoint if exists
     if Path::new("bit_llama_checkpoint.safetensors").exists() {
         println!("Resuming from checkpoint...");
         varmap.load("bit_llama_checkpoint.safetensors")?;
+
+        let data = varmap.data().lock().unwrap();
+        println!("Checkpoint loaded. Key count: {}", data.len());
+        // Verify key match
+        // Note: VarMap::load only errors if shapes mismatch or load fails,
+        // it ignores keys in file that are not in VarMap (or vice versa? No, usually precise).
+        // Let's print one key value checksum if needed, but count is enough.
+    } else {
+        println!("No checkpoint found. Starting fresh.");
     }
-    let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
-    let model = BitLlama::load(config, vb)?;
+
+    println!(
+        "Model initialized. Varmap Key count: {}",
+        varmap.data().lock().unwrap().len()
+    );
 
     let params = candle_nn::ParamsAdamW {
         lr: LR,
@@ -105,13 +122,28 @@ fn main() -> Result<()> {
     };
     let mut adam = candle_nn::AdamW::new(varmap.all_vars(), params)?;
 
-    // 3. Loop
-    let steps = 1000; // Demo run
+    // 3. Step Persistence (Load)
+    let state_path = "training_state.json";
+    let mut start_step = 0;
+    if Path::new(state_path).exists() {
+        if let Ok(file) = File::open(state_path) {
+            let reader = BufReader::new(file);
+            if let Ok(json) = serde_json::from_reader::<_, serde_json::Value>(reader) {
+                if let Some(s) = json.get("step").and_then(|v| v.as_u64()) {
+                    start_step = s as usize;
+                    println!("Resuming from Step {}", start_step);
+                }
+            }
+        }
+    }
+
+    // 4. Loop
+    let total_steps = 10000; // Increase for real training
     let log_interval = 10;
 
-    println!("Starting Training Loop ({} steps)...", steps);
+    println!("Starting Training Loop (Target: {} steps)...", total_steps);
 
-    for step in 0..steps {
+    for step in start_step..total_steps {
         let (inputs, targets) = loader.next_batch(BATCH_SIZE, CONTEXT_LEN, &device)?;
         // Shape: (B, T)
 
@@ -130,9 +162,6 @@ fn main() -> Result<()> {
         let mut loss_step = Tensor::new(0.0f32, &device)?;
 
         // Recursive Forward (Token by Token)
-        // Optimization: In real Llama, we use parallel computation.
-        // Here, we loop T. It's slow in Rust Debug, acceptable in Release?
-
         let _batch_loss_accum = 0.0;
 
         // Input: (B, T). We iterate t.
@@ -164,6 +193,12 @@ fn main() -> Result<()> {
             let val = loss_scaled.to_scalar::<f32>()?;
             println!("Step {:4} | Loss: {:.4} (Saved)", step, val);
             varmap.save("bit_llama_checkpoint.safetensors")?;
+
+            // Save Step
+            let state = serde_json::json!({ "step": step });
+            if let Ok(file) = File::create(state_path) {
+                serde_json::to_writer(file, &state)?;
+            }
         }
     }
 

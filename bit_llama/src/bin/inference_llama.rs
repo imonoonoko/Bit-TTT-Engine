@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     println!("Device: {:?}", device);
 
     // 1. Load Tokenizer
-    let tokenizer_path = "../data/TinyStories/tokenizer.json";
+    let tokenizer_path = "data/TinyStories/tokenizer.json";
     if !Path::new(tokenizer_path).exists() {
         anyhow::bail!("Tokenizer not found: {}", tokenizer_path);
     }

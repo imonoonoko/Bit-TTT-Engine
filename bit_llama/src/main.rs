@@ -37,27 +37,29 @@ fn main() -> Result<()> {
     let embeddings = Embedding::new(embedding_weights, hidden_dim);
 
     // 6. Initialize Bit-TTT Layer
-    let ttt_layer = TTTLayer::new(hidden_dim, 0.1, &device)?;
+    // NEW: Use VarBuilder with Zeros for initialization
+    let varchar = candle_nn::VarMap::new();
+    let vb = candle_nn::VarBuilder::from_varmap(&varchar, DType::F32, &device);
+    let ttt_layer = TTTLayer::load(hidden_dim, 0.1, vb)?;
 
     // Initialize Hidden State (W_state) - Tensor directly
-    let mut w_state = Tensor::zeros((d_small, d_small), DType::F32, &device)?;
+    // NEW: Use Batch Dimension (1, d_small, d_small)
+    let mut w_state = Tensor::zeros((1, d_small, d_small), DType::F32, &device)?;
 
     println!("\n--- Starting Online Learning ---");
-    println!("Step | TokenID | Loss (Reconstruction)");
+    println!("Step | TokenID | Status");
     println!("--------------------------------------");
 
     // 7. Loop through tokens
     for (i, &token_id) in tokens.iter().enumerate() {
-        // A. Get Embedding
+        // A. Get Embedding: (1, Hidden)
         let input_tensor = Tensor::new(&[token_id], &device)?;
         let embedding_vector = embeddings.forward(&input_tensor)?;
-        let x_t = embedding_vector.squeeze(0)?; // (dim)
+        // Shape is already (1, Hidden) from embedding.forward with (1) input
 
         // B. Update Step (Forward + Train)
-        let (w_new, _loss) = ttt_layer.forward_update(&w_state, &x_t)?;
-
-        // For visualization, we can calculate the reconstruction loss explicitly or usage the returned loss
-        let loss_val = _loss.to_scalar::<f32>()?;
+        // Returns (out_feat, w_new)
+        let (_out_feat, w_new) = ttt_layer.forward_update(&w_state, &embedding_vector)?;
 
         // Update state
         w_state = w_new;
@@ -66,10 +68,7 @@ fn main() -> Result<()> {
         let token_str = tokenizer
             .decode(&[token_id], true)
             .unwrap_or_else(|_| "???".to_string());
-        println!(
-            "{:4} | {:<7} ({:<5}) | {:.6}",
-            i, token_str, token_id, loss_val
-        );
+        println!("{:4} | {:<7} ({:<5}) | Updated", i, token_str, token_id);
     }
 
     println!("\n✅ Experiment Finished.");

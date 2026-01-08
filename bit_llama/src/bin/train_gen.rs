@@ -35,7 +35,7 @@ fn main() -> Result<()> {
 
     // 3. Model Setup
     // Trainable: Emb, Head
-    let mut varmap = VarMap::new();
+    let varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
 
     let vocab_size = tokenizer.get_vocab_size(true);
@@ -131,7 +131,7 @@ fn main() -> Result<()> {
         let mut current_token = encoded[0];
 
         // Warmup: Feed prompt history
-        for (i, &t) in encoded.iter().enumerate() {
+        for (_i, &t) in encoded.iter().enumerate() {
             let input_t = Tensor::new(&[t], &device)?;
             let x = embedding.forward(&input_t)?.squeeze(0)?;
             let (w_new, _) = ttt_layer.forward_update(&w_state, &x)?;

@@ -1,5 +1,5 @@
-use candle_core::{DType, Device, Module, Result, Tensor};
-use candle_nn::{Activation, VarBuilder};
+use candle_core::{DType, Module, Result, Tensor};
+use candle_nn::VarBuilder;
 
 // --- RMSNorm ---
 pub struct RMSNorm {
