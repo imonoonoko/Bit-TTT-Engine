@@ -4,6 +4,8 @@ use candle_nn::{Module, Optimizer, VarBuilder, VarMap};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 // Import core engine
 // #[path = "../core_engine.rs"]
@@ -82,6 +84,9 @@ struct Args {
 
     #[arg(long, default_value = "data/TinyStories/train.bin")]
     data: String,
+
+    #[arg(long, default_value = "500")]
+    save_interval: usize,
 }
 
 fn main() -> Result<()> {
@@ -160,8 +165,23 @@ fn main() -> Result<()> {
 
     // 4. Loop
     let log_interval = 10;
-    println!("Starting Training Loop (Target: {} steps)...", args.steps);
+    let save_interval = args.save_interval;
+    println!(
+        "Starting Training Loop (Target: {} steps, Save every {} steps)...",
+        args.steps, save_interval
+    );
     let total_steps = args.steps;
+
+    // 【1】 実行制御用のフラグを作成 (スレッド間で共有するため Arc と AtomicBool を使う)
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+
+    // 【2】 Ctrl+C ハンドラをセット
+    ctrlc::set_handler(move || {
+        println!("\n\n🛑 Ctrl+C detected! Finishing current step and saving...");
+        r.store(false, Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl-C handler");
 
     for step in start_step..total_steps {
         // Automatic Warmup for Resume (100 steps)
@@ -223,20 +243,36 @@ fn main() -> Result<()> {
         let loss_scaled = (loss_step / (CONTEXT_LEN as f64))?;
         adam.backward_step(&loss_scaled)?;
 
+        // Log loss
         if step % log_interval == 0 {
             let val = loss_scaled.to_scalar::<f32>()?;
-            println!("Step {:4} | Loss: {:.4} (Saved)", step, val);
-            varmap.save("bit_llama_checkpoint.safetensors")?;
+            println!("Step {:4} | Loss: {:.4}", step, val);
+        }
 
-            // Save Step
+        // Save checkpoint at interval
+        if step % save_interval == 0 {
+            println!("[Saving checkpoint at step {}...]", step);
+            varmap.save("bit_llama_checkpoint.safetensors")?;
             let state = serde_json::json!({ "step": step });
             if let Ok(file) = File::create(state_path) {
                 serde_json::to_writer(file, &state)?;
             }
         }
+
+        // Check for Ctrl+C shutdown
+        if !running.load(Ordering::SeqCst) {
+            println!("[Shutdown] Saving checkpoint at step {}...", step);
+            varmap.save("bit_llama_checkpoint.safetensors")?;
+            let state = serde_json::json!({ "step": step });
+            if let Ok(file) = File::create(state_path) {
+                serde_json::to_writer(file, &state)?;
+            }
+            println!("Exiting gracefully.");
+            return Ok(());
+        }
     }
 
-    println!("Saving Bit-Llama...");
+    println!("Training complete. Saving final model...");
     varmap.save("bit_llama_v1.safetensors")?;
 
     Ok(())
