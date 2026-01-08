@@ -1,5 +1,8 @@
 use candle_core::{DType, Module, Result, Tensor};
+
 use candle_nn::VarBuilder;
+
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
 
 // --- RMSNorm ---
@@ -266,6 +269,8 @@ pub struct BitLlama {
     pub config: BitLlamaConfig,
 }
 
+// --- BitLlamaConfig (Python Version) ---
+#[cfg(feature = "python")]
 #[pyclass]
 #[derive(Clone, Copy)]
 pub struct BitLlamaConfig {
@@ -279,10 +284,32 @@ pub struct BitLlamaConfig {
     pub inner_lr: f64,
 }
 
-#[allow(non_local_definitions)]
+#[cfg(feature = "python")]
 #[pymethods]
 impl BitLlamaConfig {
     #[new]
+    pub fn new(vocab_size: usize, hidden_dim: usize, num_layers: usize, inner_lr: f64) -> Self {
+        Self {
+            vocab_size,
+            hidden_dim,
+            num_layers,
+            inner_lr,
+        }
+    }
+}
+
+// --- BitLlamaConfig (Rust Version) ---
+#[cfg(not(feature = "python"))]
+#[derive(Clone, Copy)]
+pub struct BitLlamaConfig {
+    pub vocab_size: usize,
+    pub hidden_dim: usize,
+    pub num_layers: usize,
+    pub inner_lr: f64,
+}
+
+#[cfg(not(feature = "python"))]
+impl BitLlamaConfig {
     pub fn new(vocab_size: usize, hidden_dim: usize, num_layers: usize, inner_lr: f64) -> Self {
         Self {
             vocab_size,
@@ -342,6 +369,7 @@ impl BitLlama {
 
 // --- Python Bindings ---
 
+#[cfg(feature = "python")]
 #[pyclass(name = "BitLlama")]
 pub struct PyBitLlama {
     inner: BitLlama,
@@ -350,6 +378,7 @@ pub struct PyBitLlama {
     w_states: Vec<Tensor>,
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl PyBitLlama {
     #[new]
