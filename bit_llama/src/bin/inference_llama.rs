@@ -6,9 +6,10 @@ use std::path::Path;
 use tokenizers::Tokenizer;
 
 // Import core engine
-#[path = "../core_engine.rs"]
-mod core_engine;
-use core_engine::{BitLlama, BitLlamaConfig};
+// Import core engine
+// #[path = "../core_engine.rs"]
+// mod core_engine;
+use cortex_rust::{BitLlama, BitLlamaConfig};
 
 const DIM: usize = 256;
 const LAYERS: usize = 4;

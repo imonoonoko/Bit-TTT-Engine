@@ -3,8 +3,8 @@ use candle_core::{DType, Device, Tensor};
 use candle_nn::{Embedding, Module};
 use tokenizers::Tokenizer;
 
-mod core_engine;
-use core_engine::TTTLayer;
+// mod core_engine; // Moved to cortex_rust
+use cortex_rust::CandleTTTLayer as TTTLayer;
 
 fn main() -> Result<()> {
     println!("--- Bit-TTT Rust Native Experiment (Candle Core) ---");
@@ -40,7 +40,7 @@ fn main() -> Result<()> {
     // NEW: Use VarBuilder with Zeros for initialization
     let varchar = candle_nn::VarMap::new();
     let vb = candle_nn::VarBuilder::from_varmap(&varchar, DType::F32, &device);
-    let ttt_layer = TTTLayer::load(hidden_dim, 0.1, vb)?;
+    let mut ttt_layer = TTTLayer::load(hidden_dim, 0.1, vb)?;
 
     // Initialize Hidden State (W_state) - Tensor directly
     // NEW: Use Batch Dimension (1, d_small, d_small)
@@ -51,7 +51,16 @@ fn main() -> Result<()> {
     println!("--------------------------------------");
 
     // 7. Loop through tokens
+    // [Optimization] Pre-compute weights for inference
+    println!("Pre-computing BitLinear weights...");
+    ttt_layer.precompute_for_inference()?;
+
+    use std::time::Instant;
+    let mut total_duration = std::time::Duration::new(0, 0);
+
     for (i, &token_id) in tokens.iter().enumerate() {
+        let start_time = Instant::now();
+
         // A. Get Embedding: (1, Hidden)
         let input_tensor = Tensor::new(&[token_id], &device)?;
         let embedding_vector = embeddings.forward(&input_tensor)?;
@@ -64,11 +73,30 @@ fn main() -> Result<()> {
         // Update state
         w_state = w_new;
 
+        let step_duration = start_time.elapsed();
+        total_duration += step_duration;
+        let tps = 1.0 / step_duration.as_secs_f64();
+
         // D. Log
         let token_str = tokenizer
             .decode(&[token_id], true)
             .unwrap_or_else(|_| "???".to_string());
-        println!("{:4} | {:<7} ({:<5}) | Updated", i, token_str, token_id);
+        println!(
+            "{:4} | {:<7} ({:<5}) | Updated | Speed: {:.2} t/s",
+            i, token_str, token_id, tps
+        );
+    }
+
+    // Display average speed
+    let total_tokens = tokens.len();
+    if total_tokens > 0 && total_duration.as_secs_f64() > 0.0 {
+        let avg_tps = total_tokens as f64 / total_duration.as_secs_f64();
+        println!(
+            "\n📊 Average Speed: {:.2} tokens/sec ({} tokens in {:.3}s)",
+            avg_tps,
+            total_tokens,
+            total_duration.as_secs_f64()
+        );
     }
 
     println!("\n✅ Experiment Finished.");

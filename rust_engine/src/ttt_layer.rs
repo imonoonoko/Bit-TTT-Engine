@@ -1,5 +1,5 @@
 use crate::bit_linear::BitLinear;
-use ndarray::{Array1, Array2};
+use ndarray::{Array1, Array2, ArrayView2};
 
 pub struct TTTLayer {
     pub hidden_dim: usize,
@@ -51,8 +51,14 @@ impl TTTLayer {
         // Grad = error * feat.T  (Outer product)
         // (D_s) * (D_s) -> (D_s, D_s) matrix
         let d_s = feat.len();
-        let error_2d = error.clone().into_shape((d_s, 1)).unwrap();
-        let feat_2d = feat.clone().into_shape((1, d_s)).unwrap();
+        let error_2d = error
+            .clone()
+            .into_shape((d_s, 1))
+            .expect("BUG: error shape mismatch in TTT gradient calculation");
+        let feat_2d = feat
+            .clone()
+            .into_shape((1, d_s))
+            .expect("BUG: feat shape mismatch in TTT gradient calculation");
         let grad = error_2d.dot(&feat_2d);
 
         // 5. Update
@@ -62,7 +68,7 @@ impl TTTLayer {
         (w_new, pred_feat)
     }
 
-    pub fn forward_sequence(&self, x: &Array2<f32>) -> Array2<f32> {
+    pub fn forward_sequence(&self, x: &ArrayView2<f32>) -> Array2<f32> {
         let (seq_len, _dim) = x.dim();
         let d_small = self.hidden_dim / 4;
 

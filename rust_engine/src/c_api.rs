@@ -1,5 +1,5 @@
 use crate::TTTLayer;
-use ndarray::Array2;
+use ndarray::ArrayView2;
 use std::slice;
 
 /// Error Codes
@@ -49,22 +49,25 @@ pub unsafe extern "C" fn ttt_forward(
 
     let model = &*ptr; // SAFETY: ptr is checked non-null. Caller guarantees validity.
     let dim = model.hidden_dim;
-    let total_len = seq_len * dim;
+
+    // SAFETY: Prevent integer overflow when calculating buffer size
+    let total_len = match seq_len.checked_mul(dim) {
+        Some(len) => len,
+        None => return BitTTTError::DimensionMismatch as i32, // Overflow = invalid dimensions
+    };
 
     // Create view from raw C pointers
     // SAFETY: Validity of pointers and length is guaranteed by the caller (C-ABI contract).
     let input_slice = slice::from_raw_parts(input_ptr, total_len);
     let output_slice = slice::from_raw_parts_mut(output_ptr, total_len);
 
-    // Convert to ndarray (View)
-    // Safety Check: We clone to vec for safety and simplicity here.
-    let input_vec = input_slice.to_vec();
-    let input_array = match Array2::from_shape_vec((seq_len, dim), input_vec) {
-        Ok(arr) => arr,
+    // Convert to ndarray (View) -> Zero-Copy!
+    let input_view = match ArrayView2::from_shape((seq_len, dim), input_slice) {
+        Ok(view) => view,
         Err(_) => return BitTTTError::DimensionMismatch as i32,
     };
 
-    let result = model.forward_sequence(&input_array);
+    let result = model.forward_sequence(&input_view);
 
     // Copy result back to output buffer
     for (i, &val) in result.iter().enumerate() {

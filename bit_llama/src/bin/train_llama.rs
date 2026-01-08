@@ -6,9 +6,9 @@ use std::io::{BufReader, Read};
 use std::path::Path;
 
 // Import core engine
-#[path = "../core_engine.rs"]
-mod core_engine;
-use core_engine::{BitLlama, BitLlamaConfig};
+// #[path = "../core_engine.rs"]
+// mod core_engine;
+use cortex_rust::{BitLlama, BitLlamaConfig};
 
 const CONTEXT_LEN: usize = 128; // Reduced for speed (Loop overhead)
 const BATCH_SIZE: usize = 32; // Optimized for 8GB VRAM (Sweet spot?)
@@ -101,7 +101,7 @@ fn main() -> Result<()> {
         println!("Resuming from checkpoint...");
         varmap.load("bit_llama_checkpoint.safetensors")?;
 
-        let data = varmap.data().lock().unwrap();
+        let data = varmap.data().lock().expect("Failed to lock VarMap");
         println!("Checkpoint loaded. Key count: {}", data.len());
         // Verify key match
         // Note: VarMap::load only errors if shapes mismatch or load fails,
@@ -113,7 +113,7 @@ fn main() -> Result<()> {
 
     println!(
         "Model initialized. Varmap Key count: {}",
-        varmap.data().lock().unwrap().len()
+        varmap.data().lock().expect("Failed to lock VarMap").len()
     );
 
     let params = candle_nn::ParamsAdamW {

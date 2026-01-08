@@ -1,5 +1,6 @@
 use candle_core::{DType, Module, Result, Tensor};
 use candle_nn::VarBuilder;
+use pyo3::prelude::*;
 
 // --- RMSNorm ---
 pub struct RMSNorm {
@@ -43,6 +44,8 @@ pub struct BitLinear {
     pub in_features: usize,
     #[allow(dead_code)]
     pub out_features: usize,
+    // [Optimization] Pre-computed weights for inference (W_quant.T)
+    pub inference_params: Option<Tensor>,
 }
 
 impl BitLinear {
@@ -53,10 +56,31 @@ impl BitLinear {
             weight,
             in_features: in_dim,
             out_features: out_dim,
+            inference_params: None,
         })
     }
 
+    pub fn precompute_for_inference(&mut self) -> Result<()> {
+        let w = &self.weight;
+        // 1.58-bit Quantization logic (Same as forward)
+        let scale = w.abs()?.mean_all()?;
+        let w_scaled = (w / scale.to_scalar::<f32>()? as f64)?;
+        let w_quant = w_scaled.round()?.clamp(-1.0, 1.0)?;
+
+        // Transpose for matmul: x @ w.T
+        // Storing w.T directly saves transpose op at runtime
+        let w_quant_t = w_quant.t()?.detach();
+
+        self.inference_params = Some(w_quant_t);
+        Ok(())
+    }
+
     pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
+        // [Optimization] Fast path for inference
+        if let Some(w_t) = &self.inference_params {
+            return x.matmul(w_t);
+        }
+
         let w = &self.weight;
         // 1.58-bit Quantization
         let scale = w.abs()?.mean_all()?;
@@ -98,6 +122,13 @@ impl SwiGLU {
         let hidden = (silu_gate * x_up)?;
         self.w2.forward(&hidden)
     }
+
+    pub fn precompute_for_inference(&mut self) -> Result<()> {
+        self.w1.precompute_for_inference()?;
+        self.w2.precompute_for_inference()?;
+        self.w3.precompute_for_inference()?;
+        Ok(())
+    }
 }
 
 // --- TTTLayer (Updated for Batching) ---
@@ -121,6 +152,12 @@ impl TTTLayer {
             proj_up: BitLinear::load(d_small, hidden_dim, vb.pp("up"))?,
             inner_lr,
         })
+    }
+
+    pub fn precompute_for_inference(&mut self) -> Result<()> {
+        self.proj_down.precompute_for_inference()?;
+        self.proj_up.precompute_for_inference()?;
+        Ok(())
     }
 
     // Handles Batching: w_state is (B, D_small, D_small) or (D_small, D_small)
@@ -160,7 +197,7 @@ impl TTTLayer {
         let grad = diff_ed.matmul(&feat_ed_t)?;
 
         // 4. Update
-        let w_new = (w_state - grad * self.inner_lr)?;
+        let w_new = (w_state - grad * self.inner_lr)?.detach();
 
         // 5. Project Up (Residual Logic)
         let out_feat = self.proj_up.forward(&pred_inner)?;
@@ -196,6 +233,12 @@ impl BitLlamaBlock {
         })
     }
 
+    pub fn precompute_for_inference(&mut self) -> Result<()> {
+        self.ttt.precompute_for_inference()?;
+        self.mlp.precompute_for_inference()?;
+        Ok(())
+    }
+
     pub fn forward(&self, x: &Tensor, w_state: &Tensor) -> Result<(Tensor, Tensor)> {
         // 1. TTT Branch
         let residual = x;
@@ -223,12 +266,30 @@ pub struct BitLlama {
     pub config: BitLlamaConfig,
 }
 
+#[pyclass]
 #[derive(Clone, Copy)]
 pub struct BitLlamaConfig {
+    #[pyo3(get, set)]
     pub vocab_size: usize,
+    #[pyo3(get, set)]
     pub hidden_dim: usize,
+    #[pyo3(get, set)]
     pub num_layers: usize,
+    #[pyo3(get, set)]
     pub inner_lr: f64,
+}
+
+#[pymethods]
+impl BitLlamaConfig {
+    #[new]
+    pub fn new(vocab_size: usize, hidden_dim: usize, num_layers: usize, inner_lr: f64) -> Self {
+        Self {
+            vocab_size,
+            hidden_dim,
+            num_layers,
+            inner_lr,
+        }
+    }
 }
 
 impl BitLlama {
@@ -255,6 +316,13 @@ impl BitLlama {
             lm_head,
             config: cfg,
         })
+    }
+
+    pub fn precompute_for_inference(&mut self) -> Result<()> {
+        for layer in self.layers.iter_mut() {
+            layer.precompute_for_inference()?;
+        }
+        Ok(())
     }
 
     // Forward Step (Single Token) - used for inference

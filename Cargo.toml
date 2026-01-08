@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+    "rust_engine",
+    "bit_llama",
+]
+
+resolver = "2"

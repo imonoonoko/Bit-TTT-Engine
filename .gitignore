@@ -1,5 +1,8 @@
 # Rust
 rust_engine/target/
+target/
+*.log
+*.txt
 **/*.rs.bk
 
 # Python

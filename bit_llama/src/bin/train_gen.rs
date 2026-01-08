@@ -4,9 +4,10 @@ use candle_nn::{Module, Optimizer, VarBuilder, VarMap};
 use tokenizers::Tokenizer;
 
 // Import our custom Candle module
-#[path = "../core_engine.rs"]
-mod core_engine;
-use core_engine::TTTLayer;
+// Import our custom Candle module
+// #[path = "../core_engine.rs"]
+// mod core_engine;
+use cortex_rust::CandleTTTLayer as TTTLayer;
 
 fn main() -> Result<()> {
     println!("--- Bit-TTT: First Utterance (Alice) ---");
