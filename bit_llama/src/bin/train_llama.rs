@@ -164,6 +164,19 @@ fn main() -> Result<()> {
     let total_steps = args.steps;
 
     for step in start_step..total_steps {
+        // Automatic Warmup for Resume (100 steps)
+        let current_lr = if start_step > 0 && step < start_step + 100 {
+            let ratio = (step - start_step) as f64 / 100.0;
+            args.lr * ratio
+        } else {
+            args.lr
+        };
+        adam.set_learning_rate(current_lr);
+
+        if step < start_step + 5 || step % 10 == 0 {
+            println!("Step {:4} | LR: {:.7} | Loading batch...", step, current_lr);
+        }
+
         let (inputs, targets) = loader.next_batch(BATCH_SIZE, CONTEXT_LEN, &device)?;
         // Shape: (B, T)
 
