@@ -110,7 +110,11 @@ fn main() -> Result<()> {
 
     for prompt in prompts {
         println!("\nPrompt: \"{}\"", prompt);
-        let encoded = tokenizer.encode(prompt, true).unwrap().get_ids().to_vec();
+        let encoded = tokenizer
+            .encode(prompt, true)
+            .map_err(|e| anyhow::anyhow!(e))?
+            .get_ids()
+            .to_vec();
 
         // Reset State for each prompt
         let mut w_state = Tensor::zeros((1, d_small, d_small), DType::F32, &device)?;
