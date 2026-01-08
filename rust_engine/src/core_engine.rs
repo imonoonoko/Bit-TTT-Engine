@@ -1,9 +1,34 @@
 use candle_core::{DType, Module, Result, Tensor};
-
 use candle_nn::VarBuilder;
+use serde::Deserialize;
+use std::path::Path;
+use tokenizers::Tokenizer;
+
+// --- Constants ---
+const RMS_NORM_EPS: f64 = 1e-5;
+const TTT_NORM_EPS: f32 = 1e-6;
+const TEMP_MIN: f64 = 1e-6;
+
+// --- Helper Trait for Robust Operations ---
+trait TensorExt {
+    fn matmul_robust(&self, rhs: &Tensor) -> Result<Tensor>;
+}
+
+impl TensorExt for Tensor {
+    fn matmul_robust(&self, rhs: &Tensor) -> Result<Tensor> {
+        if self.rank() == 1 {
+            // [D] @ [D, Out] -> [Out]
+            self.unsqueeze(0)?.matmul(rhs)?.squeeze(0)
+        } else {
+            self.matmul(rhs)
+        }
+    }
+}
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
+#[cfg(feature = "python")]
+use pyo3::{pyclass, pymethods};
 
 // --- RMSNorm ---
 pub struct RMSNorm {
@@ -81,7 +106,8 @@ impl BitLinear {
     pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
         // [Optimization] Fast path for inference
         if let Some(w_t) = &self.inference_params {
-            return x.matmul(w_t);
+            // Uses robust matmul to support 1D inputs
+            return x.matmul_robust(w_t);
         }
 
         let w = &self.weight;
@@ -95,9 +121,8 @@ impl BitLinear {
         let detached_diff = diff.detach();
         let w_ste = (detached_diff + &w_scaled)?;
 
-        // Matmul that handles (B, T, D) or (B, D) or (D)
         // Linear: x @ w.T
-        x.matmul(&w_ste.t()?)
+        x.matmul_robust(&w_ste.t()?)
     }
 }
 
@@ -174,7 +199,7 @@ impl TTTLayer {
         let last_dim = feat.rank() - 1;
         let norm = feat.sqr()?.sum_keepdim(last_dim)?.sqrt()?;
         // Avoid div by zero
-        let norm = norm.broadcast_add(&Tensor::new(&[1e-6f32], x_t.device())?)?;
+        let norm = norm.broadcast_add(&Tensor::new(&[TTT_NORM_EPS], x_t.device())?)?;
         let feat_norm = feat.broadcast_div(&norm)?;
 
         // 2. Predict (TTT)
@@ -219,9 +244,9 @@ pub struct BitLlamaBlock {
 
 impl BitLlamaBlock {
     pub fn load(dim: usize, inner_lr: f64, vb: VarBuilder) -> Result<Self> {
-        let norm1 = RMSNorm::load(dim, 1e-5, vb.pp("norm1"))?;
+        let norm1 = RMSNorm::load(dim, RMS_NORM_EPS, vb.pp("norm1"))?;
         let ttt = TTTLayer::load(dim, inner_lr, vb.pp("ttt"))?;
-        let norm2 = RMSNorm::load(dim, 1e-5, vb.pp("norm2"))?;
+        let norm2 = RMSNorm::load(dim, RMS_NORM_EPS, vb.pp("norm2"))?;
         // MLP Dim: Usually 4 * Dim, or 8/3 * Dim (SwiGLU convention)
         // Let's use 2.5 * Dim (BitNet uses lighter MLP sometimes) or 4 * Dim.
         // TinyStories is small. 4 x Dim is good.
@@ -272,7 +297,7 @@ pub struct BitLlama {
 // --- BitLlamaConfig (Python Version) ---
 #[cfg(feature = "python")]
 #[pyclass]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Deserialize)]
 pub struct BitLlamaConfig {
     #[pyo3(get, set)]
     pub vocab_size: usize,
@@ -300,7 +325,7 @@ impl BitLlamaConfig {
 
 // --- BitLlamaConfig (Rust Version) ---
 #[cfg(not(feature = "python"))]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Deserialize)]
 pub struct BitLlamaConfig {
     pub vocab_size: usize,
     pub hidden_dim: usize,
@@ -331,8 +356,8 @@ impl BitLlama {
             layers.push(layer);
         }
 
-        let norm = RMSNorm::load(cfg.hidden_dim, 1e-5, vb.pp("norm_f"))?;
-        let lm_head = candle_nn::linear(cfg.hidden_dim, cfg.vocab_size, vb.pp("lm_head"))?;
+        let norm = RMSNorm::load(cfg.hidden_dim, RMS_NORM_EPS, vb.pp("norm_f"))?;
+        let lm_head = candle_nn::linear_no_bias(cfg.hidden_dim, cfg.vocab_size, vb.pp("lm_head"))?;
 
         Ok(Self {
             embedding,
@@ -362,8 +387,173 @@ impl BitLlama {
         }
 
         let h_norm = self.norm.forward(&h)?;
-        let logits = self.lm_head.forward(&h_norm)?;
+        // Use robust matmul via TensorExt.
+        // Need to simulate linear layer: x @ w.T + b
+        // lm_head has no bias. weight is [Out, In].
+        // x @ w.T
+        // TensorExt is implemented on Tensor.
+        // We need to access candle_nn::Linear weight.
+        let w = self.lm_head.weight();
+        // Since candle_nn::Linear::forward failed on 1D, we use our robust matmul.
+        let logits = h_norm.matmul_robust(&w.t()?)?;
         Ok(logits)
+    }
+}
+
+// --- High-Level Rust API (Llama) ---
+
+pub struct Llama {
+    pub model: BitLlama,
+    pub tokenizer: Tokenizer,
+    pub device: candle_core::Device,
+    pub w_states: Vec<Tensor>,
+}
+
+impl Llama {
+    pub fn new<P: AsRef<Path>>(model_dir: P) -> anyhow::Result<Self> {
+        let dir = model_dir.as_ref();
+
+        // 1. Setup Device
+        let device = candle_core::Device::cuda_if_available(0).unwrap_or(candle_core::Device::Cpu);
+
+        // 2. Load Config
+        let config_path = dir.join("config.json");
+        let config_str = std::fs::read_to_string(&config_path)
+            .map_err(|e| anyhow::anyhow!("Failed to read config.json: {}", e))?;
+        let config: BitLlamaConfig = serde_json::from_str(&config_str)?;
+
+        // 3. Load Tokenizer
+        let tokenizer_path = dir.join("tokenizer.json");
+        let tokenizer = Tokenizer::from_file(&tokenizer_path)
+            .map_err(|e| anyhow::anyhow!("Failed to load tokenizer.json: {}", e))?;
+
+        // 4. Load Weights
+        let weights_path = dir.join("model.safetensors");
+        let vb = unsafe {
+            candle_nn::VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)?
+        };
+
+        // 5. Build Model
+        let mut model = BitLlama::load(config, vb)?;
+        model.precompute_for_inference()?;
+
+        // 6. Init State
+        let d_small = config.hidden_dim / 4;
+        let mut w_states = Vec::new();
+        for _ in 0..config.num_layers {
+            let w = Tensor::zeros((d_small, d_small), DType::F32, &device)?;
+            w_states.push(w);
+        }
+
+        Ok(Self {
+            model,
+            tokenizer,
+            device,
+            w_states,
+        })
+    }
+
+    // Streaming with Callback: fn(token_str) -> Result<Continue(bool)>
+    // Returns full text at the end for convenience
+    pub fn stream_completion<F>(
+        &mut self,
+        prompt: &str,
+        max_tokens: usize,
+        temp: f64,
+        mut callback: F,
+    ) -> anyhow::Result<String>
+    where
+        F: FnMut(&str) -> anyhow::Result<bool>,
+    {
+        // Enforce temp > 0
+        let temperature = if temp <= 0.0 { TEMP_MIN } else { temp };
+
+        // 1. Tokenize
+        let encoding = self
+            .tokenizer
+            .encode(prompt, true)
+            .map_err(|e| anyhow::anyhow!(e))?;
+        let tokens = encoding.get_ids();
+
+        if tokens.is_empty() {
+            return Ok(String::new());
+        }
+
+        let mut all_tokens = tokens.to_vec();
+
+        // 2. Prefill
+        let mut next_token = *all_tokens.last().unwrap(); // Placeholder
+
+        for &t in tokens {
+            let input = Tensor::new(&[t], &self.device)?;
+            let logits = self.model.forward_one(&input, &mut self.w_states)?;
+
+            if t == *tokens.last().unwrap() {
+                // Sample next token from last logits
+                let logits_v = logits.squeeze(0)?;
+                let prs = candle_nn::ops::softmax(&(&logits_v / temperature)?, 0)?;
+                let prs_vec = prs.to_vec1::<f32>()?;
+                next_token = Self::sample_multinomial(&prs_vec)?;
+            }
+        }
+
+        all_tokens.push(next_token);
+
+        // Decode and yield first generated token
+        // Use single-token decoding or differential decoding?
+        // Tokenizers can be tricky with partial decoding.
+        // Simple approach: Decode(all) - Decode(prev) is sometimes wrong for subwords.
+        // Better: Decode(chunk).
+        // Let's just decode the single token for now, verifying it works for most cases.
+        let token_str = self
+            .tokenizer
+            .decode(&[next_token], true)
+            .map_err(|e| anyhow::anyhow!(e))?;
+        if !callback(&token_str)? {
+            return Ok(token_str); // Abort
+        }
+
+        // 3. Generation Loop
+        for _ in 0..(max_tokens - 1) {
+            let input = Tensor::new(&[next_token], &self.device)?;
+            let logits = self.model.forward_one(&input, &mut self.w_states)?;
+            let logits_v = logits.squeeze(0)?;
+
+            let prs = candle_nn::ops::softmax(&(&logits_v / temperature)?, 0)?;
+            let prs_vec = prs.to_vec1::<f32>()?;
+            next_token = Self::sample_multinomial(&prs_vec)?;
+
+            all_tokens.push(next_token);
+
+            // Streaming output
+            let token_str = self
+                .tokenizer
+                .decode(&[next_token], true)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if !callback(&token_str)? {
+                break;
+            }
+        }
+
+        let full_text = self
+            .tokenizer
+            .decode(&all_tokens, true)
+            .map_err(|e| anyhow::anyhow!(e))?;
+        Ok(full_text)
+    }
+
+    fn sample_multinomial(probs: &[f32]) -> anyhow::Result<u32> {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let r = rng.gen::<f32>();
+        let mut cdf = 0.0;
+        for (i, p) in probs.iter().enumerate() {
+            cdf += p;
+            if r < cdf {
+                return Ok(i as u32);
+            }
+        }
+        Ok((probs.len() - 1) as u32)
     }
 }
 

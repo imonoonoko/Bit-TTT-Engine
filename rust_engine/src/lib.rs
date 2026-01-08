@@ -10,7 +10,7 @@ pub use legacy::bit_linear::BitLinear;
 pub use legacy::ttt_layer::TTTLayer;
 
 // New Core Engine re-exports
-pub use core_engine::{BitLlama, BitLlamaBlock, BitLlamaConfig, TTTLayer as CandleTTTLayer};
+pub use core_engine::{BitLlama, BitLlamaBlock, BitLlamaConfig, Llama, TTTLayer as CandleTTTLayer};
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;

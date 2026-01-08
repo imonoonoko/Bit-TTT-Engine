@@ -1,30 +1,31 @@
 use anyhow::Result;
 use candle_core::{DType, Device, Tensor};
-use candle_nn::{Module, Optimizer, VarBuilder, VarMap};
+use candle_nn::{Optimizer, VarBuilder, VarMap};
+use cortex_rust::{BitLlama, BitLlamaConfig};
 use tokenizers::Tokenizer;
 
-// Import our custom Candle module
-// Import our custom Candle module
-// #[path = "../core_engine.rs"]
-// mod core_engine;
-use cortex_rust::CandleTTTLayer as TTTLayer;
+// Uses BitLlama structure for training (instead of manual layer implementation)
 
 fn main() -> Result<()> {
-    println!("--- Bit-TTT: First Utterance (Alice) ---");
-    // 1. Setup Device (Auto-detect CUDA)
+    println!("--- Bit-TTT: Training (New Ecosystem) ---");
+
+    // 1. Setup Device
     let device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);
     println!("Using Device: {:?}", device);
 
     // 2. Data Prep
-    println!("Loading Tokenizer...");
-    let tokenizer = Tokenizer::from_pretrained("gpt2", None).map_err(|e| anyhow::anyhow!(e))?;
+    // 2. Data Prep
+    println!("Loading Tokenizer from local dummy...");
+    let tokenizer_path = std::path::Path::new("../models/dummy/tokenizer.json");
+    let tokenizer = if tokenizer_path.exists() {
+        Tokenizer::from_file(tokenizer_path).map_err(|e| anyhow::anyhow!(e))?
+    } else {
+        println!("Local tokenizer not found, trying download (gpt2)...");
+        Tokenizer::from_pretrained("gpt2", None).map_err(|e| anyhow::anyhow!(e))?
+    };
 
     let text = "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, 'and what is the use of a book,' thought Alice 'without pictures or conversation?'";
-    println!(
-        "Training Text ({} chars): \"{}...\"",
-        text.len(),
-        &text[..50]
-    );
+    println!("Training Text: \"{}...\"", &text[..50]);
 
     let tokens = tokenizer
         .encode(text, true)
@@ -33,21 +34,19 @@ fn main() -> Result<()> {
         .to_vec();
     println!("Total Tokens: {}", tokens.len());
 
-    // 3. Model Setup
-    // Trainable: Emb, Head
+    // 3. Model Setup (Trainable)
     let varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
 
-    let vocab_size = tokenizer.get_vocab_size(true);
-    let hidden_dim = 64;
+    let config = BitLlamaConfig {
+        vocab_size: tokenizer.get_vocab_size(true),
+        hidden_dim: 64,
+        num_layers: 2,
+        inner_lr: 0.001,
+    };
 
-    let embedding = candle_nn::embedding(vocab_size, hidden_dim, vb.pp("emb"))?;
-    let lm_head = candle_nn::linear(hidden_dim, vocab_size, vb.pp("head"))?;
-
-    // Unfreezed: Bit-TTT Core
-    // Now part of `vb` which comes from `varmap`
-    let ttt_layer = TTTLayer::load(hidden_dim, 0.1, vb.pp("ttt"))?;
-    let d_small = hidden_dim / 4;
+    println!("Initializing BitLlama Model...");
+    let model = BitLlama::load(config, vb)?;
 
     // 4. Optimizer
     let mut adam = candle_nn::AdamW::new(
@@ -60,11 +59,18 @@ fn main() -> Result<()> {
 
     // 5. Training Loop
     println!("\n--- Training Start ---");
-    let epochs = 5; // FAST SAVE
+    let epochs = 5;
+    let d_small = config.hidden_dim / 4;
 
     for epoch in 0..epochs {
-        // Reset Hidden State (Fast Weight) at start of sequence
-        let mut w_state = Tensor::zeros((1, d_small, d_small), DType::F32, &device)?;
+        // Init Hidden States (Fast Weights)
+        // Note: Llama::new does this internally for inference, but here we manage it manually for training loop
+        let mut w_states = Vec::new();
+        for _ in 0..config.num_layers {
+            let w = Tensor::zeros((d_small, d_small), DType::F32, &device)?;
+            w_states.push(w);
+        }
+
         let mut total_loss = 0.0;
 
         // Sequence Loop
@@ -72,25 +78,23 @@ fn main() -> Result<()> {
             let input_token = tokens[i];
             let target_token = tokens[i + 1];
 
-            // A. Embed
-            let input_t = Tensor::new(&[input_token], &device)?;
-            let x = embedding.forward(&input_t)?; // (1, D)
+            // A. Input Tensor
+            let input_t = Tensor::new(&[input_token], &device)?; // (1)
 
-            // B. TTT Forward + Update
-            let (out_feat, w_new) = ttt_layer.forward_update(&w_state, &x)?;
-            w_state = w_new;
+            // B. Forward (BitLlama)
+            // forward_one returns logits: (V) or (1, V)
+            // BitLlama::forward_one modifies w_states in-place (TTT update)
+            let logits = model.forward_one(&input_t, &mut w_states)?;
 
-            // C. Residual
-            let hidden = (out_feat + x)?;
-
-            // D. Logits & Loss
-            let logits = lm_head.forward(&hidden)?;
+            // C. Loss
             let target_t = Tensor::new(&[target_token as i64], &device)?;
-            let loss = candle_nn::loss::cross_entropy(&logits, &target_t)?;
+            // forward_one returns 1D logits [Vocab], but cross_entropy needs [Batch, Vocab]
+            let logits_batch = logits.unsqueeze(0)?;
+            let loss = candle_nn::loss::cross_entropy(&logits_batch, &target_t)?;
 
             total_loss += loss.to_scalar::<f32>()?;
 
-            // E. Backward
+            // D. Backward
             adam.backward_step(&loss)?;
         }
 
@@ -105,58 +109,6 @@ fn main() -> Result<()> {
     println!("\nSaving Brain to alice_brain.safetensors...");
     varmap.save("alice_brain.safetensors")?;
 
-    // 6. Generation (Multi-Prompt)
-    println!("\n--- Generation Phase ---");
-    let prompts = vec!["Alice"];
-
-    for prompt in prompts {
-        println!("\nPrompt: \"{}\"", prompt);
-        let encoded = tokenizer
-            .encode(prompt, true)
-            .map_err(|e| anyhow::anyhow!(e))?
-            .get_ids()
-            .to_vec();
-
-        // Reset State for each prompt
-        let mut w_state = Tensor::zeros((1, d_small, d_small), DType::F32, &device)?;
-        let mut current_token = encoded[0];
-
-        // Warmup: Feed prompt history
-        for t in encoded.iter() {
-            let input_t = Tensor::new(&[*t], &device)?;
-            let x = embedding.forward(&input_t)?; // (1, D)
-                                                  // Fix: w_new is the second return value
-            let (_out_feat, w_new) = ttt_layer.forward_update(&w_state, &x)?;
-            w_state = w_new;
-            current_token = *t;
-        }
-
-        // Generate 20 tokens
-        print!("{} -> ", prompt);
-        for _ in 0..20 {
-            let input_t = Tensor::new(&[current_token], &device)?;
-            let x = embedding.forward(&input_t)?; // (1, D)
-
-            // Forward (Update + Predict)
-            // Fix: w_new is the second return value
-            let (out_feat, w_new) = ttt_layer.forward_update(&w_state, &x)?;
-
-            // Residual Connection
-            let hidden = (out_feat + x)?;
-
-            let logits = lm_head.forward(&hidden)?;
-            let probs = candle_nn::ops::softmax(&logits, 1)?;
-            let next_token = probs.argmax(1)?.squeeze(0)?.to_scalar::<u32>()?;
-
-            let token_str = tokenizer.decode(&[next_token], true).unwrap_or("?".into());
-            print!("{}", token_str);
-
-            w_state = w_new;
-            current_token = next_token;
-        }
-        println!("...");
-    }
-    println!("\n--- End Generation ---");
-
+    println!("\n--- End Training ---");
     Ok(())
 }

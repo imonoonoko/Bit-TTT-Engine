@@ -11,6 +11,7 @@ tokenizers = { version = "0.22", features = ["http"] }
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+clap = { version = "4.4", features = ["derive"] }
 # ndarray = "0.15"
 
 # Import our local Bit-TTT engine

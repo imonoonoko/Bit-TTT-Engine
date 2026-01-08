@@ -1,0 +1,6 @@
+{
+  "vocab_size": 50257,
+  "hidden_dim": 64,
+  "num_layers": 2,
+  "inner_lr": 0.001
+}
