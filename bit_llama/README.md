@@ -41,56 +41,23 @@
 
 ---
 
-## 🛠️ How to Run (実行手順)
+## 🛠️ Development Guide (Experimental)
 
+The following steps are for **active development and debugging only**.
+
+### 1. Requirements
+*   Python 3.x
+*   Rust Toolchain (Cargo)
+*   CUDA Toolkit (Optional, for GPU training)
+
+### 2. Run Training (Dev Mode)
 ```bash
-# 1. Data Prep (教材の準備)
-# Pythonライブラリのインストール
-pip install -r requirements.txt
-
-# TinyStoriesのダウンロードとトークナイザ作成
-cd data_prep
-python prepare_tinystories.py
-cd ..
-
-# 2. Train (学習)
-# [GPU (NVIDIA) の場合]
+# GPU Mode (Requires NVIDIA GPU)
 cargo run --release --features cuda --bin train_llama
 
-# [CPU (Mac/Intel/AMD) の場合]
-# --features cuda を外すとCPUモードで動作します（遅いですが動作します）
+# CPU Mode
 cargo run --release --bin train_llama
-
-# 3. Inference (推論)
-# 学習したモデルと会話します
-cargo run --release --bin inference_llama
 ```
 
-## 🔌 Python Integration (外部連携)
-Bit-TTT Engine は Python から DLL (`.so`/`.dylib`) として直接呼び出し可能です。
-(詳細は RootのREADMEを参照してください)
+> **Warning**: This is a prototype implementation. Parameters and data formats may change.
 
----
-
-## 💎 Pre-trained Models (配布計画)
-
-現在、以下のモデルの学習と公開を計画しています。
-
-| Model Name | Specs | Training Data | Status | Download |
-|---|---|---|---|---|
-| **Bit-Llama-Micro** | ~11M Params, 1.58bit | TinyStories (Mini) | 🟡 **Training** | *Coming Soon* |
-| **Bit-Llama-Code** | ~100M Params, 1.58bit | Python Code Snippets | ⚪ Planned | - |
-
-> **Note**: 学習済み重み (`.safetensors`) は Hugging Face Hub での公開を予定しています。
-
----
-
-## 📊 現状のステータス (Metrics)
-*   **Training Speed**: ~800 tokens/sec (RTX 4060 Ti)
-*   **Loss Curve**: Smooth convergence observed at Step 150 (Loss: 4.15).
-*   **Generation**: "Always" -> "Alice" -> "Alice was very tired..." (Context learning observed).
-
-## 🚀 Future Roadmap
-1.  **Distributed Training**: Implement Data Parallelism for multi-GPU training.
-2.  **Hugging Face Integration**: Provide `from_pretrained("bit-ttt/llama-11m")` API.
-3.  **Desktop App**: Integrate into "Alice" desktop assistant (Phase 13 Step 5).

@@ -29,8 +29,7 @@
 
 ## Quick Start (Python)
 
-> **Want to train an LLM?**  
-> Go to **[`bit_llama/README.md`](bit_llama/README.md)** for instructions on training "Bit-Llama" on TinyStories.
+
 
 To try the Core Engine directly via Python C-API:
 
@@ -99,8 +98,7 @@ void ttt_destroy(void* model);
 
 ## クイックスタート (Python)
 
-> **LLMを学習させたい場合**  
-> **[`bit_llama/README.md`](bit_llama/README.md)** をご覧ください。「Bit-Llama」の学習手順（TinyStories使用）を詳述しています。
+
 
 Core Engine (C-API) の動作を試すには：
 
