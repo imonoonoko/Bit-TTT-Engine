@@ -128,7 +128,7 @@ fn main() -> Result<()> {
                 .enumerate()
                 .max_by(|(_, a): &(usize, &f32), (_, b): &(usize, &f32)| a.total_cmp(b))
                 .map(|(index, _)| index as u32)
-                .unwrap();
+                .ok_or_else(|| anyhow::anyhow!("Logits empty"))?;
 
             last_token_id = next_token;
             current_ids.push(next_token);
