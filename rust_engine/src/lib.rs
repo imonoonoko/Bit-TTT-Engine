@@ -1,3 +1,5 @@
+#![allow(non_local_definitions)]
+
 pub mod bit_linear;
 pub mod c_api;
 pub mod core_engine;

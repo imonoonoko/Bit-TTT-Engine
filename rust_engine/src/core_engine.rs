@@ -279,6 +279,7 @@ pub struct BitLlamaConfig {
     pub inner_lr: f64,
 }
 
+#[allow(non_local_definitions)]
 #[pymethods]
 impl BitLlamaConfig {
     #[new]
@@ -298,11 +299,8 @@ impl BitLlama {
 
         let mut layers = Vec::new();
         for i in 0..cfg.num_layers {
-            let layer = BitLlamaBlock::load(
-                cfg.hidden_dim,
-                cfg.inner_lr,
-                vb.pp(&format!("layers.{}", i)),
-            )?;
+            let layer =
+                BitLlamaBlock::load(cfg.hidden_dim, cfg.inner_lr, vb.pp(format!("layers.{}", i)))?;
             layers.push(layer);
         }
 
@@ -327,7 +325,7 @@ impl BitLlama {
 
     // Forward Step (Single Token) - used for inference
     #[allow(dead_code)]
-    pub fn forward_one(&self, x: &Tensor, w_states: &mut Vec<Tensor>) -> Result<Tensor> {
+    pub fn forward_one(&self, x: &Tensor, w_states: &mut [Tensor]) -> Result<Tensor> {
         let mut h = self.embedding.forward(x)?.squeeze(0)?; // (B, D) or (D)
 
         for (i, layer) in self.layers.iter().enumerate() {

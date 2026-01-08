@@ -64,7 +64,6 @@ impl BitLinear {
         // Note: Weights scale is 1.0 (since they are pure {-1, 0, 1})
         // Real BitNet has a weight scale too, but let's ignore for this prototype loop.
 
-        let y = y_int.mapv(|v| (v as f32) / scale);
-        y
+        y_int.mapv(|v| (v as f32) / scale)
     }
 }

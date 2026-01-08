@@ -21,6 +21,10 @@ pub extern "C" fn ttt_create(hidden_dim: usize, inner_lr: f32) -> *mut TTTLayer 
 
 /// Destroy the TTTModel to free memory.
 /// Must be called once done with the pointer.
+///
+/// # Safety
+/// - `ptr` must be a valid pointer to `TTTLayer` created by `ttt_create`, or null.
+/// - After calling this function, `ptr` is invalid and must not be used.
 #[no_mangle]
 pub unsafe extern "C" fn ttt_destroy(ptr: *mut TTTLayer) {
     if !ptr.is_null() {

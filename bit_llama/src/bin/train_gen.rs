@@ -122,13 +122,13 @@ fn main() -> Result<()> {
         let mut current_token = encoded[0];
 
         // Warmup: Feed prompt history
-        for (_i, &t) in encoded.iter().enumerate() {
-            let input_t = Tensor::new(&[t], &device)?;
+        for t in encoded.iter() {
+            let input_t = Tensor::new(&[*t], &device)?;
             let x = embedding.forward(&input_t)?; // (1, D)
                                                   // Fix: w_new is the second return value
             let (_out_feat, w_new) = ttt_layer.forward_update(&w_state, &x)?;
             w_state = w_new;
-            current_token = t;
+            current_token = *t;
         }
 
         // Generate 20 tokens
