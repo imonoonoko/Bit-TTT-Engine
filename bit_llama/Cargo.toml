@@ -13,6 +13,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 clap = { version = "4.4", features = ["derive"] }
 ctrlc = "3.4"
+eframe = "0.26"  # GUI framework
+rfd = "0.14"     # File dialog
 # ndarray = "0.15"
 
 # Import our local Bit-TTT engine
