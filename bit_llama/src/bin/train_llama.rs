@@ -129,17 +129,23 @@ fn main() -> Result<()> {
     let model = BitLlama::load(config, vb)?;
 
     // 2. Overwrite with Checkpoint if exists (with fallback for different working directories)
-    let checkpoint_path = if Path::new("bit_llama_checkpoint.safetensors").exists() {
-        "bit_llama_checkpoint.safetensors".to_string()
+    // Determine base directory based on where we find the checkpoint
+    let base_dir = if Path::new("bit_llama_checkpoint.safetensors").exists() {
+        "".to_string()
     } else if Path::new("bit_llama/bit_llama_checkpoint.safetensors").exists() {
-        println!("Using fallback checkpoint path: bit_llama/bit_llama_checkpoint.safetensors");
-        "bit_llama/bit_llama_checkpoint.safetensors".to_string()
+        println!("Using fallback directory: bit_llama/");
+        "bit_llama/".to_string()
+    } else if Path::new("bit_llama/training_state.json").exists() {
+        // No checkpoint but state exists in bit_llama/
+        println!("Using fallback directory: bit_llama/");
+        "bit_llama/".to_string()
     } else {
-        String::new()
+        "".to_string() // New run, use current directory
     };
 
-    if !checkpoint_path.is_empty() {
-        println!("Resuming from checkpoint...");
+    let checkpoint_path = format!("{}bit_llama_checkpoint.safetensors", base_dir);
+    if Path::new(&checkpoint_path).exists() {
+        println!("Resuming from checkpoint: {}", checkpoint_path);
         varmap.load(&checkpoint_path)?;
         let data = varmap.data().lock().expect("Failed to lock VarMap");
         println!("Checkpoint loaded. Key count: {}", data.len());
@@ -158,15 +164,8 @@ fn main() -> Result<()> {
     };
     let mut adam = candle_nn::AdamW::new(varmap.all_vars(), params)?;
 
-    // 3. Step Persistence (Load) - with fallback path
-    let state_path = if Path::new("training_state.json").exists() {
-        "training_state.json".to_string()
-    } else if Path::new("bit_llama/training_state.json").exists() {
-        println!("Using fallback state path: bit_llama/training_state.json");
-        "bit_llama/training_state.json".to_string()
-    } else {
-        "training_state.json".to_string() // Default for new runs
-    };
+    // 3. Step Persistence (Load) - use same base_dir for consistency
+    let state_path = format!("{}training_state.json", base_dir);
     let mut start_step = 0;
     if Path::new(&state_path).exists() {
         if let Ok(file) = File::open(&state_path) {
@@ -286,12 +285,12 @@ fn main() -> Result<()> {
                 "🏆 New best loss: {:.4} (Step {}) - Saving model_best.safetensors",
                 val, step
             );
-            varmap.save("model_best.safetensors")?;
+            varmap.save(&format!("{}model_best.safetensors", base_dir))?;
         }
 
         // ♻️ Save checkpoint at interval (Rolling Checkpoints)
         if step % save_interval == 0 && step > 0 {
-            let checkpoint_name = format!("checkpoint_step_{}.safetensors", step);
+            let checkpoint_name = format!("{}checkpoint_step_{}.safetensors", base_dir, step);
             println!("[Saving checkpoint: {}...]", checkpoint_name);
             varmap.save(&checkpoint_name)?;
             let state = serde_json::json!({ "step": step });
@@ -313,7 +312,7 @@ fn main() -> Result<()> {
         // Check for Ctrl+C shutdown
         if !running.load(Ordering::SeqCst) {
             println!("[Shutdown] Saving checkpoint at step {}...", step);
-            varmap.save("bit_llama_checkpoint.safetensors")?;
+            varmap.save(&format!("{}bit_llama_checkpoint.safetensors", base_dir))?;
             let state = serde_json::json!({ "step": step });
             if let Ok(file) = File::create(&state_path) {
                 serde_json::to_writer(file, &state)?;
@@ -324,7 +323,7 @@ fn main() -> Result<()> {
     }
 
     println!("Training complete. Saving final model...");
-    varmap.save("bit_llama_v1.safetensors")?;
+    varmap.save(&format!("{}bit_llama_v1.safetensors", base_dir))?;
 
     Ok(())
 }
