@@ -21,9 +21,10 @@ impl TTTLayer {
     }
 
     /// Single step update logic
-    /// W_state: (D_small, D_small) hidden weights
-    /// x_t: (D) input vector
-    /// Returns: (Updated W_state, Feature Reconstruction)
+    /// `W_state`: (D_small, D_small) hidden weights
+    /// `x_t`: (D) input vector
+    /// Returns: (Updated `W_state`, Feature Reconstruction)
+    #[must_use]
     pub fn forward_state_update(
         &self,
         w_state: &Array2<f32>, // Using f32 for state accumulation to be safe for now, can be i32 later

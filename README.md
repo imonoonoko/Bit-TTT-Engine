@@ -1,144 +1,79 @@
 # Bit-TTT Engine: High-Performance Brain Core
-**1.58-bit Quantization + Test-Time Training (TTT)** Implementation in Rust.
 
-[Japanese / 日本語](#japanese) below.
+**1.58-bit Quantization + Test-Time Training (TTT)** Implementation in Rust.
+This engine powers the next generation of efficient, adaptive AI models.
+
+[Japanese / 日本語](README_JA.md) (See separate file)
 
 ---
 
-<a name="english"></a>
 # 🇬🇧 English: Bit-TTT Engine
 
 ## Overview
-**Bit-TTT Engine** is a high-performance implementation of the Bit-TTT architecture. It combines **1.58-bit quantization efficiency** with **Test-Time Training (TTT)** adaptability. It runs entirely on the CPU using optimized integer arithmetic and SIMD/AVX instructions, achieving extreme throughput (**30,000+ TPS**).
+**Bit-TTT Engine** is a high-performance implementation of the Bit-TTT architecture. It combines **1.58-bit quantization efficiency** with **Test-Time Training (TTT)** adaptability. It uses the **Candle** framework for tensor operations and **PyO3** for seamless Python integration.
 
 📘 **[Read the Architecture Design](ARCHITECTURE.md)** to understand the core philosophy.
 
-
-
 ## Features
-*   **Ultra Fast**: Optimizes matrix operations using `i8` integers and AVX2/AVX-512 instructions.
-*   **Adaptive Memory**: Updates its internal state in real-time for every input token (online learning).
-*   **Portable**: Distributed as a standard generic DLL/Shared Library (`release/Bit_TTT.dll`), usable from Python, C#, Unity, C++, etc.
-*   **Safe**: Safe C-ABI with error codes and documented safety contracts.
+*   **Rust-First & Python-Compatible**: Core logic in Rust for speed, exposed to Python via PyO3.
+*   **Zero-Copy Inference**: Efficient data handling between Rust and Python.
+*   **Device Support**: Supports **CPU** (AVX optimized) and **CUDA** (GPU) execution.
+*   **Pure Rust Mode**: Can be compiled as a standalone binary without Python dependencies (`--no-default-features`).
+*   **Safe**: Strict adherence to Rust safety guarantees.
 
 ## Project Components
 
-- **[`rust_engine/`](rust_engine/)**: Core logic optimized for C-ABI (DLL generation).
-- **[`examples/`](examples/)**: Minimal usage examples (Python etc).
-- **[`python_proto/`](python_proto/)**: Original Python prototype for research.
+- **[`rust_engine/`](rust_engine/)**: The core implementation.
+    - `core_engine.rs`: Candle-based neural network logic.
+    - `lib.rs`: PyO3 bindings (`cortex_rust` module).
+    - `legacy/`: Deprecated ndarray/C-API code.
+- **[`bit_llama/`](bit_llama/)**: Standalone Rust binary for training/inference.
 
 ## Quick Start (Python)
 
-
-
-To try the Core Engine directly via Python C-API:
-
-```bash
-# Verify behavior and speed
-python examples/python_inference.py
-```
-
-Expected Output:
-```text
-Running Inference on 10 tokens...
-Done in 0.0003 sec.
-Output Shape: 640 floats
-Success! w_state has been updated internally.
-```
-
-(For detailed benchmarking, run `python release/benchmark.py`)
-
-## Developer Guide (C-ABI)
-For integration with C, C++, or C# (Unity), use the exported functions:
-
-### Error Codes
-| Code | Name | Description |
-|---|---|---|
-| **0** | `Ok` | Success |
-| **1** | `NullPointer` | Input pointer was null |
-| **2** | `DimensionMismatch` | Input array size validation failed |
-| **99** | `Panic` | Internal Rust panic caught |
-
-### API Signature
-```c
-// Create Model: returns ptr or NULL
-void* ttt_create(size_t hidden_dim, float inner_lr);
-
-// Forward + Update: returns error code (0 = Ok)
-int ttt_forward(void* model, const float* input, size_t seq_len, float* output);
-
-// Destroy Model
-void ttt_destroy(void* model);
-```
-
----
-
-<a name="japanese"></a>
-# 🇯🇵 日本語: Bit-TTT 脳エンジン
-
-## 概要
-**Bit-TTT Engine** は、Bit-TTTアーキテクチャの高性能実装版です。**1.58bit量子化による効率性**と、**Test-Time Training (推論時学習) による適応性**を兼ね備えています。
-完全にCPU上で動作し、SIMD/AVX命令を駆使した整数演算により、一般的なPCで **30,000+ TPS (トークン/秒)** という驚異的な推論速度を実現します。
-
-📘 **[アーキテクチャ設計書 (日本語)](ARCHITECTURE_JA.md)** も参照してください。
-
-
-
-## 特徴
-*   **爆速**: `i8` 整数演算とAVX2/AVX-512命令セットにより最適化されています。
-*   **学習する記憶**: 入力トークンを受け取るたびに、内部のニューラルネットをリアルタイムで更新（学習）します。
-*   **ポータブル**: 汎用的な DLL (`release/Bit_TTT.dll`) として提供されるため、Python, Unity (C#), C++, Node.js などあらゆる環境から利用可能です。
-*   **安全**: エラーコードによる例外制御と、明確な安全性保証を備えています。
-
-## プロジェクト構成
-
-- **[`rust_engine/`](rust_engine/)**: C-ABI (DLL生成) に最適化されたコアロジックです。
-- **[`examples/`](examples/)**: Python等からの最小利用例です。
-- **[`python_proto/`](python_proto/)**: 研究用の初期Pythonプロトタイプです。
-
-## クイックスタート (Python)
-
-
-
-Core Engine (C-API) の動作を試すには：
+### 1. Build & Install
+Use `maturin` to build the Python wheel.
 
 ```bash
-python examples/python_inference.py
+cd rust_engine
+maturin develop --release
 ```
 
-実行結果の例:
-```text
-Running Inference on 10 tokens...
-Done in 0.0003 sec.
-Output Shape: 640 floats
-Success! w_state has been updated internally.
+### 2. Usage
+```python
+import cortex_rust
+
+# Configuration
+config = cortex_rust.BitLlamaConfig(
+    vocab_size=1000,
+    hidden_dim=256,
+    num_layers=4,
+    inner_lr=0.01
+)
+
+# Load Model (Device: "cpu" or "cuda")
+model = cortex_rust.BitLlama(config, "path/to/model.safetensors", device="cuda")
+
+# Inference (Tokens)
+tokens = [1, 50, 100]
+logits = model.forward(tokens)
+print(logits)
 ```
 
-(詳細なベンチマーク測定は `python release/benchmark.py` を実行してください)
+## Advanced Build Options
 
-## 開発者ガイド (C-ABI)
-C言語、C++、C# (Unity) などから利用する場合は、以下の関数を使用します。
+### Pure Rust Binary (No Python)
+If you want to build a standalone Rust binary without linking to Python (e.g., for embedded deployment):
 
-### エラーコード
-| Code | Name | Description |
-|---|---|---|
-| **0** | `Ok` | 成功 |
-| **1** | `NullPointer` | ポインタが null |
-| **2** | `DimensionMismatch` | 配列サイズ不正 |
-| **99** | `Panic` | 内部パニック発生 |
-
-### API シグネチャ
-```c
-// モデル生成
-void* ttt_create(size_t hidden_dim, float inner_lr);
-
-// 推論実行 (戻り値 0 = 成功)
-int ttt_forward(void* model, const float* input, size_t seq_len, float* output);
-
-// モデル破棄
-void ttt_destroy(void* model);
+```bash
+cargo build --release --no-default-features
 ```
+(This disables the `python` feature flag in `Cargo.toml`).
+
+### Device Selection
+In `PyBitLlama`, you can specify the device:
+- `device="cpu"` (Default if omitted)
+- `device="cuda"` (Requires CUDA feature enabled and GPU)
 
 ---
 *Created by Project Bit-TTT.*
-
