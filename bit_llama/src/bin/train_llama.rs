@@ -2,7 +2,7 @@ use anyhow::Result;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::{Module, Optimizer, VarBuilder, VarMap};
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -269,6 +269,7 @@ fn main() -> Result<()> {
 
         if step < start_step + 5 || step % 10 == 0 {
             println!("Step {:4} | LR: {:.7} | Loading batch...", step, current_lr);
+            std::io::stdout().flush().ok();
         }
 
         let (inputs, targets) = loader.next_batch(BATCH_SIZE, CONTEXT_LEN, &device)?;
@@ -321,6 +322,7 @@ fn main() -> Result<()> {
         let val = loss_scaled.to_scalar::<f32>()?;
         if step % log_interval == 0 {
             println!("Step {:4} | Loss: {:.4}", step, val);
+            std::io::stdout().flush().ok();
         }
 
         // 🏆 Best Model Saving (Check every 50 steps to reduce SSD writes)
