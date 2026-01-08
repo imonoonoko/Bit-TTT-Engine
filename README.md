@@ -83,7 +83,7 @@ void ttt_destroy(void* model);
 
 📘 **[アーキテクチャ設計書 (日本語)](ARCHITECTURE_JA.md)** も参照してください。
 
-🚀 **新機能 (Phase 13):**  **[`bit_llama/`](bit_llama/)** ディレクトリにて、完全な言語モデル実装（Bit-Llama）を公開しました！ GPU学習と文章生成が可能です。
+
 
 ## 特徴
 *   **爆速**: `i8` 整数演算とAVX2/AVX-512命令セットにより最適化されています。
