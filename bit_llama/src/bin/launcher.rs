@@ -194,6 +194,9 @@ impl MyApp {
         // Clear old logs
         self.logs.lock().unwrap().clear();
 
+        // 🛡️ Safety: Ensure no leftover stop signal exists
+        let _ = std::fs::remove_file("stop_signal");
+
         let lr_str = format!("{}", self.lr);
         let min_lr_str = format!("{}", self.min_lr);
         let warmup_str = format!("{}", self.warmup_steps);
