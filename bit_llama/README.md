@@ -44,17 +44,24 @@ TinyStoriesデータセットを用いて、「物語を語る能力」の獲得
 
 ```bash
 # 1. Data Prep (教材の準備)
-# TinyStoriesのダウンロードとトークナイザ作成を行います
+# Pythonライブラリのインストール
+pip install -r requirements.txt
+
+# TinyStoriesのダウンロードとトークナイザ作成
 cd data_prep
 python prepare_tinystories.py
 cd ..
 
 # 2. Train (学習)
-# GPU(CUDA)を使用して学習を開始します
+# [GPU (NVIDIA) の場合]
 cargo run --release --features cuda --bin train_llama
 
+# [CPU (Mac/Intel/AMD) の場合]
+# --features cuda を外すとCPUモードで動作します（遅いですが動作します）
+cargo run --release --bin train_llama
+
 # 3. Inference (推論)
-# 学習したモデルと会話します (CPUモードで動作)
+# 学習したモデルと会話します
 cargo run --release --bin inference_llama
 ```
 
