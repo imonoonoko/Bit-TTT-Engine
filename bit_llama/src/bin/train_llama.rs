@@ -87,6 +87,17 @@ struct Args {
 
     #[arg(long, default_value = "500")]
     save_interval: usize,
+
+    /// 最小学習率 (Cosine Decayの着地点)
+    #[arg(long, default_value_t = 0.0)]
+    min_lr: f64,
+
+    /// ウォームアップにかけるステップ数
+    #[arg(long, default_value_t = 500)]
+    warmup_steps: usize,
+
+    #[arg(long)]
+    load: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -143,12 +154,28 @@ fn main() -> Result<()> {
         "".to_string() // New run, use current directory
     };
 
-    let checkpoint_path = format!("{}bit_llama_checkpoint.safetensors", base_dir);
-    if Path::new(&checkpoint_path).exists() {
-        println!("Resuming from checkpoint: {}", checkpoint_path);
-        varmap.load(&checkpoint_path)?;
-        let data = varmap.data().lock().expect("Failed to lock VarMap");
-        println!("Checkpoint loaded. Key count: {}", data.len());
+    let checkpoint_path = if let Some(path) = args.load {
+        // A. Launcherで指定された場合 (最優先)
+        println!("📂 Loading specific checkpoint from Launcher: {}", path);
+        Some(path)
+    } else if Path::new("bit_llama_checkpoint.safetensors").exists() {
+        // B. カレントディレクトリにある場合
+        Some("bit_llama_checkpoint.safetensors".to_string())
+    } else if Path::new("bit_llama/bit_llama_checkpoint.safetensors").exists() {
+        // C. サブフォルダにある場合
+        Some("bit_llama/bit_llama_checkpoint.safetensors".to_string())
+    } else {
+        None
+    };
+
+    if let Some(path) = checkpoint_path {
+        if Path::new(&path).exists() {
+            println!("Resuming from checkpoint: {}", path);
+            varmap.load(&path)?;
+            // ... (ここから下の Key count 表示などはそのまま) ...
+        } else {
+            println!("⚠️ Specified checkpoint not found: {}", path);
+        }
     } else {
         println!("No checkpoint found. Starting fresh.");
     }
@@ -214,13 +241,31 @@ fn main() -> Result<()> {
 
     for step in start_step..total_steps {
         // Automatic Warmup for Resume (100 steps)
-        let current_lr = if start_step > 0 && step < start_step + 100 {
-            let ratio = (step - start_step) as f64 / 100.0;
-            args.lr * ratio
+        // --- Learning Rate Schedule (Warmup + Cosine Decay) ---
+        let current_lr = if step < args.warmup_steps {
+            // 1. ウォームアップ期間 (0 -> Max LR)
+            // 線形に加速します
+            args.lr * (step as f64 / args.warmup_steps as f64)
         } else {
-            args.lr
+            // 2. 減衰期間 (Max LR -> Min LR)
+            // 残りのステップ数に対する進捗率 (0.0 〜 1.0)
+            let progress = (step - args.warmup_steps) as f64
+                / (args.steps.saturating_sub(args.warmup_steps)) as f64;
+
+            // 安全策: 1.0を超えないようにする
+            let progress = progress.min(1.0).max(0.0);
+
+            // Cosine計算: 1.0 (開始時) -> -1.0 (終了時)
+            let cosine = (progress * std::f64::consts::PI).cos();
+
+            // 減衰係数: 1.0 -> 0.0 に変換
+            let decay = 0.5 * (1.0 + cosine);
+
+            // 適用: 最小LR + (幅 * 係数)
+            args.min_lr + (args.lr - args.min_lr) * decay
         };
         adam.set_learning_rate(current_lr);
+        // -----------------------------------------------------
 
         if step < start_step + 5 || step % 10 == 0 {
             println!("Step {:4} | LR: {:.7} | Loading batch...", step, current_lr);
@@ -286,6 +331,24 @@ fn main() -> Result<()> {
                 val, step
             );
             varmap.save(&format!("{}model_best.safetensors", base_dir))?;
+        }
+
+        // Check for 'stop_signal' file (Graceful Shutdown from GUI)
+        if Path::new("stop_signal").exists() {
+            println!("\n🛑 Stop signal detected! Saving and exiting...");
+
+            // 1. Remove signal file
+            let _ = std::fs::remove_file("stop_signal");
+
+            // 2. Save checkpoint
+            varmap.save(&format!("{}bit_llama_checkpoint.safetensors", base_dir))?;
+            let state = serde_json::json!({ "step": step });
+            if let Ok(file) = File::create(&state_path) {
+                serde_json::to_writer(file, &state)?;
+            }
+
+            println!("✅ Saved successfully. Exiting.");
+            return Ok(());
         }
 
         // ♻️ Save checkpoint at interval (Rolling Checkpoints)

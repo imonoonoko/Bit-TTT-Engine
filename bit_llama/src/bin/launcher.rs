@@ -25,6 +25,8 @@ fn main() -> Result<(), eframe::Error> {
 
 struct MyApp {
     lr: f64,
+    min_lr: f64,
+    warmup_steps: usize,
     steps: usize,
     save_interval: usize,
     checkpoint_path: Option<String>,
@@ -38,6 +40,8 @@ impl Default for MyApp {
     fn default() -> Self {
         Self {
             lr: 0.00005,
+            min_lr: 0.00001,   // 最小LR
+            warmup_steps: 500, // ウォームアップ
             steps: 10000,
             save_interval: 1000,
             checkpoint_path: None,
@@ -51,7 +55,21 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Check if process finished
+        // 1. Mutexのロック処理とトリミングを CentralPanel の前に出す
+        // これにより、eguiのパネル内での self 借用とロックが競合するのを防ぐ
+        let logs_to_display = {
+            let mut logs_guard = self.logs.lock().unwrap();
+            let len = logs_guard.len(); // ← 追加
+
+            if len > 50000 {
+                let tail = logs_guard.split_off(len - 40000);
+                *logs_guard = tail;
+            }
+
+            logs_guard.clone()
+        };
+
+        // 2. プロセスの終了チェック
         if let Some(ref mut child) = self.process {
             match child.try_wait() {
                 Ok(Some(_)) => {
@@ -72,7 +90,7 @@ impl eframe::App for MyApp {
             ui.heading("🚀 Bit-TTT Training Control");
             ui.separator();
 
-            // 1. Checkpoint selection
+            // 1. チェックポイント選択
             ui.horizontal(|ui| {
                 ui.label("Checkpoint:");
                 if let Some(path) = &self.checkpoint_path {
@@ -101,6 +119,16 @@ impl eframe::App for MyApp {
             ui.horizontal(|ui| {
                 ui.label("Learning Rate:");
                 ui.add(egui::Slider::new(&mut self.lr, 0.00001..=0.01).logarithmic(true));
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Min LR (End):");
+                ui.add(egui::Slider::new(&mut self.min_lr, 0.000001..=0.001).logarithmic(true));
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Warmup Steps:");
+                ui.add(egui::DragValue::new(&mut self.warmup_steps).speed(10));
             });
 
             ui.horizontal(|ui| {
@@ -146,16 +174,11 @@ impl eframe::App for MyApp {
 
             // 4. Log display area
             ui.heading("📋 Logs:");
-            let logs = self.logs.lock().unwrap();
             egui::ScrollArea::vertical()
                 .max_height(200.0)
                 .stick_to_bottom(true)
                 .show(ui, |ui| {
-                    ui.add(
-                        egui::TextEdit::multiline(&mut logs.as_str())
-                            .font(egui::TextStyle::Monospace)
-                            .desired_width(f32::INFINITY),
-                    );
+                    ui.code(logs_to_display.as_str());
                 });
 
             // Request repaint while running to update logs
@@ -172,10 +195,12 @@ impl MyApp {
         self.logs.lock().unwrap().clear();
 
         let lr_str = format!("{}", self.lr);
+        let min_lr_str = format!("{}", self.min_lr);
+        let warmup_str = format!("{}", self.warmup_steps);
         let steps_str = format!("{}", self.steps);
         let save_interval_str = format!("{}", self.save_interval);
 
-        let args = vec![
+        let mut args = vec![
             "run",
             "--release",
             "--features",
@@ -185,6 +210,10 @@ impl MyApp {
             "--",
             "--lr",
             &lr_str,
+            "--min-lr",
+            &min_lr_str,
+            "--warmup-steps",
+            &warmup_str,
             "--steps",
             &steps_str,
             "--save-interval",
@@ -193,8 +222,11 @@ impl MyApp {
             &self.data_path,
         ];
 
-        // Add checkpoint path if specified (future: implement --load flag)
-        let _checkpoint = self.checkpoint_path.clone();
+        // 🚨 Fix: Pass checkpoint path to the trainer
+        if let Some(path) = &self.checkpoint_path {
+            args.push("--load");
+            args.push(path);
+        }
 
         {
             let mut logs = self.logs.lock().unwrap();
@@ -255,25 +287,17 @@ impl MyApp {
     }
 
     fn stop_training(&mut self) {
-        if let Some(ref mut child) = self.process {
-            // On Windows, we can't send SIGINT easily, so we use kill
-            // The train_llama process has Ctrl+C handling, but from GUI we'll use taskkill
-            #[cfg(windows)]
-            {
-                let pid = child.id();
-                // Try to send Ctrl+C signal via taskkill /PID /T (tree kill)
-                let _ = Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/T"])
-                    .output();
+        // "stop_signal" という空のファイルを作成する
+        // これが「止まれ」の合図になります
+        match std::fs::File::create("stop_signal") {
+            Ok(_) => {
+                let mut logs = self.logs.lock().unwrap();
+                logs.push_str("\n🛑 Stop signal sent (File created). Waiting for trainer to save and exit...\n");
             }
-
-            #[cfg(not(windows))]
-            {
-                let _ = child.kill();
+            Err(e) => {
+                let mut logs = self.logs.lock().unwrap();
+                logs.push_str(&format!("\n❌ Failed to create stop signal: {}\n", e));
             }
-
-            let mut logs = self.logs.lock().unwrap();
-            logs.push_str("\n🛑 Stop signal sent. Waiting for graceful shutdown...\n");
         }
     }
 }
