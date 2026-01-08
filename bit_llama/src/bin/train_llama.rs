@@ -128,11 +128,19 @@ fn main() -> Result<()> {
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
     let model = BitLlama::load(config, vb)?;
 
-    // 2. Overwrite with Checkpoint if exists
-    if Path::new("bit_llama_checkpoint.safetensors").exists() {
-        println!("Resuming from checkpoint...");
-        varmap.load("bit_llama_checkpoint.safetensors")?;
+    // 2. Overwrite with Checkpoint if exists (with fallback for different working directories)
+    let checkpoint_path = if Path::new("bit_llama_checkpoint.safetensors").exists() {
+        "bit_llama_checkpoint.safetensors".to_string()
+    } else if Path::new("bit_llama/bit_llama_checkpoint.safetensors").exists() {
+        println!("Using fallback checkpoint path: bit_llama/bit_llama_checkpoint.safetensors");
+        "bit_llama/bit_llama_checkpoint.safetensors".to_string()
+    } else {
+        String::new()
+    };
 
+    if !checkpoint_path.is_empty() {
+        println!("Resuming from checkpoint...");
+        varmap.load(&checkpoint_path)?;
         let data = varmap.data().lock().expect("Failed to lock VarMap");
         println!("Checkpoint loaded. Key count: {}", data.len());
     } else {
@@ -150,11 +158,18 @@ fn main() -> Result<()> {
     };
     let mut adam = candle_nn::AdamW::new(varmap.all_vars(), params)?;
 
-    // 3. Step Persistence (Load)
-    let state_path = "training_state.json";
+    // 3. Step Persistence (Load) - with fallback path
+    let state_path = if Path::new("training_state.json").exists() {
+        "training_state.json".to_string()
+    } else if Path::new("bit_llama/training_state.json").exists() {
+        println!("Using fallback state path: bit_llama/training_state.json");
+        "bit_llama/training_state.json".to_string()
+    } else {
+        "training_state.json".to_string() // Default for new runs
+    };
     let mut start_step = 0;
-    if Path::new(state_path).exists() {
-        if let Ok(file) = File::open(state_path) {
+    if Path::new(&state_path).exists() {
+        if let Ok(file) = File::open(&state_path) {
             let reader = BufReader::new(file);
             if let Ok(json) = serde_json::from_reader::<_, serde_json::Value>(reader) {
                 if let Some(s) = json.get("step").and_then(|v| v.as_u64()) {
@@ -280,7 +295,7 @@ fn main() -> Result<()> {
             println!("[Saving checkpoint: {}...]", checkpoint_name);
             varmap.save(&checkpoint_name)?;
             let state = serde_json::json!({ "step": step });
-            if let Ok(file) = File::create(state_path) {
+            if let Ok(file) = File::create(&state_path) {
                 serde_json::to_writer(file, &state)?;
             }
 
@@ -300,7 +315,7 @@ fn main() -> Result<()> {
             println!("[Shutdown] Saving checkpoint at step {}...", step);
             varmap.save("bit_llama_checkpoint.safetensors")?;
             let state = serde_json::json!({ "step": step });
-            if let Ok(file) = File::create(state_path) {
+            if let Ok(file) = File::create(&state_path) {
                 serde_json::to_writer(file, &state)?;
             }
             println!("Exiting gracefully.");
