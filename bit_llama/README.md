@@ -82,11 +82,12 @@ lib = ctypes.CDLL(f"./target/release/{lib_name}")
 lib.ttt_create.argtypes = [ctypes.c_size_t, ctypes.c_float]
 lib.ttt_create.restype = ctypes.c_void_p
 lib.ttt_forward.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.c_size_t, ctypes.POINTER(ctypes.c_float)]
+lib.ttt_forward.restype = ctypes.c_int # Returns 0 on Success
 
 # 3. Run
 dim = 64
 model = lib.ttt_create(dim, 0.1)
-# ... forward pass ...
+# ... forward pass ... (check ret == 0)
 ```
 > ※ 詳細な仕様は `release/benchmark.py` を参照してください。
 

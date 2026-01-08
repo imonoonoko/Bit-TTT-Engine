@@ -53,7 +53,7 @@ lib.ttt_forward.argtypes = [
     ctypes.c_size_t,
     ctypes.POINTER(ctypes.c_float)
 ]
-lib.ttt_forward.restype = None
+lib.ttt_forward.restype = ctypes.c_int
 
 # void ttt_destroy(void* model_ptr);
 lib.ttt_destroy.argtypes = [ctypes.c_void_p]
@@ -69,7 +69,9 @@ class RustTTT:
         input_array = (ctypes.c_float * len(input_list))(*input_list)
         output_array = (ctypes.c_float * len(input_list))()
         
-        lib.ttt_forward(self.ptr, input_array, seq_len, output_array)
+        ret = lib.ttt_forward(self.ptr, input_array, seq_len, output_array)
+        if ret != 0:
+            raise RuntimeError(f"Rust Core Engine Failed with error code: {ret}")
         
         # Convert back to list (optional, for verification)
         return list(output_array)
