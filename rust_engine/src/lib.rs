@@ -19,8 +19,6 @@ use pyo3::prelude::*;
 #[pymodule]
 fn cortex_rust(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<BitLlamaConfig>()?;
-    // Note: BitLlama and TTTLayer structs need #[pyclass] to be added to the module.
-    // implementing that requires modifying core_engine.rs.
-    // For now, we just expose the Config to verify build.
+    m.add_class::<core_engine::PyBitLlama>()?;
     Ok(())
 }

@@ -339,3 +339,73 @@ impl BitLlama {
         Ok(logits)
     }
 }
+
+// --- Python Bindings ---
+
+#[pyclass(name = "BitLlama")]
+pub struct PyBitLlama {
+    inner: BitLlama,
+    // Keep state in Python or Rust? Rust is safer for TTT.
+    // For TTT, we need w_states.
+    w_states: Vec<Tensor>,
+}
+
+#[pymethods]
+impl PyBitLlama {
+    #[new]
+    pub fn new(config: BitLlamaConfig, checkpoint_path: &str) -> PyResult<Self> {
+        // Use CPU for now for simplicity, or CUDA if available?
+        // Let's stick to CPU or auto-detect.
+        let device = candle_core::Device::Cpu;
+
+        let vb = unsafe {
+            candle_nn::VarBuilder::from_mmaped_safetensors(&[checkpoint_path], DType::F32, &device)
+                .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
+        };
+
+        let mut model = BitLlama::load(config, vb)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        // Optimization: Pre-compute weights
+        model
+            .precompute_for_inference()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        // Initialize TTT state (w_state)
+        // Shape: (1, d_small, d_small) for each layer
+        let d_small = config.hidden_dim / 4;
+        let mut w_states = Vec::new();
+        for _ in 0..config.num_layers {
+            let w = Tensor::zeros((d_small, d_small), DType::F32, &device)
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            w_states.push(w);
+        }
+
+        Ok(Self {
+            inner: model,
+            w_states,
+        })
+    }
+
+    pub fn forward(&mut self, token_id: u32) -> PyResult<Vec<f32>> {
+        let device = self.inner.embedding.embeddings().device();
+        let input = Tensor::new(&[token_id], device)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        // forward_one expects &mut [Tensor] for states
+        let logits = self
+            .inner
+            .forward_one(&input, &mut self.w_states)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        // Convert logits to Vec<f32> for Python
+        // logits: (VocabSize)
+        let logits_vec = logits
+            .squeeze(0)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?
+            .to_vec1::<f32>()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        Ok(logits_vec)
+    }
+}
