@@ -58,12 +58,16 @@ cargo build --release --features cuda
 ```
 
 ### 2. Training (train_llama)
-Trains a model from scratch using the `cortex_rust` engine.
+Trains a model from scratch using the `cortex_rust` engine. Supports CLI arguments for hyperparameter tuning.
+
 ```bash
-# Verify config in src/bin/train_llama.rs first
-cargo run --release --features cuda --bin train_llama
+# Example: Train with custom Learning Rate and Step count
+cargo run --release --features cuda --bin train_llama -- --lr 0.001 --steps 10000 --data data/TinyStories/train.bin
 ```
 *Outputs: `bit_llama_checkpoint.safetensors`*
+
+> [!TIP]
+> When resuming from a checkpoint, use a lower learning rate (e.g., `--lr 5e-5`) to avoid loss spikes (rebound).
 
 ### 3. Inference (bit_llama)
 High-performance streaming generation.

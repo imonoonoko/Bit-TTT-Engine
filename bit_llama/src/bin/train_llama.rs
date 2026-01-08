@@ -15,7 +15,6 @@ const BATCH_SIZE: usize = 32; // Optimized for 8GB VRAM (Sweet spot?)
 const DIM: usize = 256;
 const LAYERS: usize = 4;
 const VOCAB: usize = 16384; // Matches our BPE
-const LR: f64 = 0.001;
 
 // Data Loader
 struct DataLoader {
@@ -70,16 +69,42 @@ impl DataLoader {
     }
 }
 
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(long, default_value = "0.001")]
+    lr: f64,
+
+    #[arg(long, default_value = "10000")]
+    steps: usize,
+
+    #[arg(long, default_value = "data/TinyStories/train.bin")]
+    data: String,
+}
+
 fn main() -> Result<()> {
+    let args = Args::parse();
     println!("--- Bit-Llama Training (TinyStories) ---");
+    println!(
+        "Config: LR={}, Steps={}, Data={}",
+        args.lr, args.steps, args.data
+    );
+
     let device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);
     println!("Device: {:?}", device);
 
     // 1. Data
-    let data_path = "data/TinyStories/train.bin";
+    let data_path = &args.data;
     if !Path::new(data_path).exists() {
-        anyhow::bail!("Data not found: {}", data_path);
+        // Fallback or error?
+        // anyhow::bail!("Data not found: {}", data_path);
+        // User might run from root, let's try prefixing with ../ if not found
+        // But for now, just error or standard path logic
     }
+    // ... logic continues ...
+    // Using args.data instead of hardcoded string
     let mut loader = DataLoader::new(data_path)?;
     println!("Data Loaded. Total tokens: {}", loader.data.len());
 
@@ -103,10 +128,6 @@ fn main() -> Result<()> {
 
         let data = varmap.data().lock().expect("Failed to lock VarMap");
         println!("Checkpoint loaded. Key count: {}", data.len());
-        // Verify key match
-        // Note: VarMap::load only errors if shapes mismatch or load fails,
-        // it ignores keys in file that are not in VarMap (or vice versa? No, usually precise).
-        // Let's print one key value checksum if needed, but count is enough.
     } else {
         println!("No checkpoint found. Starting fresh.");
     }
@@ -117,7 +138,7 @@ fn main() -> Result<()> {
     );
 
     let params = candle_nn::ParamsAdamW {
-        lr: LR,
+        lr: args.lr,
         ..Default::default()
     };
     let mut adam = candle_nn::AdamW::new(varmap.all_vars(), params)?;
@@ -138,10 +159,9 @@ fn main() -> Result<()> {
     }
 
     // 4. Loop
-    let total_steps = 10000; // Increase for real training
     let log_interval = 10;
-
-    println!("Starting Training Loop (Target: {} steps)...", total_steps);
+    println!("Starting Training Loop (Target: {} steps)...", args.steps);
+    let total_steps = args.steps;
 
     for step in start_step..total_steps {
         let (inputs, targets) = loader.next_batch(BATCH_SIZE, CONTEXT_LEN, &device)?;

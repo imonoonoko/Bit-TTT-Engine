@@ -58,12 +58,16 @@ cargo build --release --features cuda
 ```
 
 ### 2. 学習 (train_llama)
-`cortex_rust` エンジンを使用してゼロからモデルを学習します。
+`cortex_rust` エンジンを使用してゼロからモデルを学習します。CLI引数でハイパーパラメータを調整可能です。
+
 ```bash
-# 事前に src/bin/train_llama.rs の設定を確認してください
-cargo run --release --features cuda --bin train_llama
+# 例: 学習率・ステップ数・データパスを指定して実行
+cargo run --release --features cuda --bin train_llama -- --lr 0.001 --steps 10000 --data data/TinyStories/train.bin
 ```
 *出力: `bit_llama_checkpoint.safetensors`*
+
+> [!TIP]
+> チェックポイントから学習を再開する場合は、Lossの急増（リバウンド）を防ぐために学習率を下げて（例: `--lr 5e-5`）実行することを推奨します。
 
 ### 3. 推論 (bit_llama)
 高性能なストリーミング生成を実行します。
