@@ -49,13 +49,16 @@ pub unsafe extern "C" fn ttt_forward(
     // Convert to ndarray (View)
     // Note: Array2::from_shape_vec would copy, usually.
     // Here we construct a view.
-    let input_array = Array2::from_shape_vec((seq_len, dim), input_slice.to_vec()).unwrap();
-    // Optimization note: to_vec() copies. To be zero-copy we'd use ArrayView, but BitTTT might need own data?
-    // Current TTTLayer takes &Array2, so View is fine.
-    // Let's optimize:
-    // let input_view = ArrayView2::from_shape((seq_len, dim), input_slice).unwrap();
-    // But TTTLayer implementation uses logic that might not strictly match View logic if we didn't write it that way.
-    // Safe bet: Clone to vec as done above for now.
+    // Convert to ndarray (View)
+    // Safety Check: Ensure dimensions match
+    let input_vec = input_slice.to_vec();
+    let input_array = match Array2::from_shape_vec((seq_len, dim), input_vec) {
+        Ok(arr) => arr,
+        Err(e) => {
+            eprintln!("Error creating ndarray from shape: {}", e);
+            return;
+        }
+    };
 
     let result = model.forward_sequence(&input_array);
 

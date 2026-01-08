@@ -1,0 +1,48 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+
+      - name: Build Engine
+        run: cargo build --verbose
+        working-directory: ./Bit-TTT/rust_engine
+
+      - name: Run Tests (Engine)
+        run: cargo test --verbose
+        working-directory: ./Bit-TTT/rust_engine
+
+      - name: Build Llama
+        run: cargo build --verbose
+        working-directory: ./Bit-TTT/bit_llama
+
+      - name: Run Tests (Llama)
+        run: cargo test --verbose
+        working-directory: ./Bit-TTT/bit_llama
+
+      - name: Check Formatting
+        run: cargo fmt --all -- --check
+        working-directory: ./Bit-TTT
+
+      - name: Run Clippy
+        run: cargo clippy -- -D warnings
+        working-directory: ./Bit-TTT/rust_engine
