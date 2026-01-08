@@ -4,7 +4,7 @@ use candle_nn::{Module, Optimizer, VarBuilder, VarMap};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 // Import core engine
@@ -177,13 +177,26 @@ fn main() -> Result<()> {
     // 【1】 実行制御用のフラグを作成 (スレッド間で共有するため Arc と AtomicBool を使う)
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
+    let ctrl_c_count = Arc::new(AtomicUsize::new(0));
+    let c = ctrl_c_count.clone();
 
-    // 【2】 Ctrl+C ハンドラをセット
+    // 【2】 Ctrl+C ハンドラをセット (2回押しで強制終了)
     ctrlc::set_handler(move || {
-        println!("\n\n🛑 Ctrl+C detected! Finishing current step and saving...");
-        r.store(false, Ordering::SeqCst);
+        let count = c.fetch_add(1, Ordering::SeqCst) + 1;
+        if count == 1 {
+            println!("\n\n🛑 Ctrl+C detected! Finishing current step and saving...");
+            println!("   (Press Ctrl+C again to force quit WITHOUT saving)");
+            r.store(false, Ordering::SeqCst);
+        } else {
+            println!("\n⚠️  Force quit! Exiting immediately without saving.");
+            std::process::exit(1);
+        }
     })
     .expect("Error setting Ctrl-C handler");
+
+    // Best loss tracking
+    let mut best_loss = f32::MAX;
+    let mut checkpoint_history: Vec<String> = Vec::new(); // Rolling checkpoints
 
     for step in start_step..total_steps {
         // Automatic Warmup for Resume (100 steps)
@@ -245,19 +258,40 @@ fn main() -> Result<()> {
         let loss_scaled = (loss_step / (CONTEXT_LEN as f64))?;
         adam.backward_step(&loss_scaled)?;
 
-        // Log loss
+        // Log loss + Best model check
+        let val = loss_scaled.to_scalar::<f32>()?;
         if step % log_interval == 0 {
-            let val = loss_scaled.to_scalar::<f32>()?;
             println!("Step {:4} | Loss: {:.4}", step, val);
         }
 
-        // Save checkpoint at interval
-        if step % save_interval == 0 {
-            println!("[Saving checkpoint at step {}...]", step);
-            varmap.save("bit_llama_checkpoint.safetensors")?;
+        // 🏆 Best Model Saving
+        if val < best_loss {
+            best_loss = val;
+            println!(
+                "🏆 New best loss: {:.4} - Saving model_best.safetensors",
+                val
+            );
+            varmap.save("model_best.safetensors")?;
+        }
+
+        // ♻️ Save checkpoint at interval (Rolling Checkpoints)
+        if step % save_interval == 0 && step > 0 {
+            let checkpoint_name = format!("checkpoint_step_{}.safetensors", step);
+            println!("[Saving checkpoint: {}...]", checkpoint_name);
+            varmap.save(&checkpoint_name)?;
             let state = serde_json::json!({ "step": step });
             if let Ok(file) = File::create(state_path) {
                 serde_json::to_writer(file, &state)?;
+            }
+
+            // Rolling: keep only last 3 checkpoints
+            checkpoint_history.push(checkpoint_name);
+            if checkpoint_history.len() > 3 {
+                let old = checkpoint_history.remove(0);
+                if Path::new(&old).exists() {
+                    println!("♻️ Deleting old checkpoint: {}", old);
+                    let _ = std::fs::remove_file(&old);
+                }
             }
         }
 
