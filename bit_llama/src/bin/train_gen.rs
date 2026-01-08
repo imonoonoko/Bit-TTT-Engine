@@ -64,7 +64,7 @@ fn main() -> Result<()> {
 
     for epoch in 0..epochs {
         // Reset Hidden State (Fast Weight) at start of sequence
-        let mut w_state = Tensor::zeros((d_small, d_small), DType::F32, &device)?;
+        let mut w_state = Tensor::zeros((1, d_small, d_small), DType::F32, &device)?;
         let mut total_loss = 0.0;
 
         // Sequence Loop
@@ -74,30 +74,17 @@ fn main() -> Result<()> {
 
             // A. Embed
             let input_t = Tensor::new(&[input_token], &device)?;
-            let x_emb = embedding.forward(&input_t)?;
-            let x = x_emb.squeeze(0)?; // (dim)
+            let x = embedding.forward(&input_t)?; // (1, D)
 
             // B. TTT Forward + Update
-            let (w_new, _) = ttt_layer.forward_update(&w_state, &x)?;
-
+            let (out_feat, w_new) = ttt_layer.forward_update(&w_state, &x)?;
             w_state = w_new;
 
-            // C. Readout
-            let feat = ttt_layer.proj_down.forward(&x)?;
-            let norm = feat.sqr()?.sum_all()?.sqrt()?;
-            let norm_val = norm.to_scalar::<f32>()?;
-            let feat_norm = if norm_val > 1e-6 {
-                (feat / (norm_val as f64))?
-            } else {
-                feat
-            };
-
-            let pred_inner = w_state.matmul(&feat_norm.unsqueeze(1)?)?.squeeze(1)?;
-            let out_feat = ttt_layer.proj_up.forward(&pred_inner)?;
-            let hidden = (out_feat + x)?; // Residual
+            // C. Residual
+            let hidden = (out_feat + x)?;
 
             // D. Logits & Loss
-            let logits = lm_head.forward(&hidden.unsqueeze(0)?)?;
+            let logits = lm_head.forward(&hidden)?;
             let target_t = Tensor::new(&[target_token as i64], &device)?;
             let loss = candle_nn::loss::cross_entropy(&logits, &target_t)?;
 
@@ -127,7 +114,7 @@ fn main() -> Result<()> {
         let encoded = tokenizer.encode(prompt, true).unwrap().get_ids().to_vec();
 
         // Reset State for each prompt
-        let mut w_state = Tensor::zeros((d_small, d_small), DType::F32, &device)?;
+        let mut w_state = Tensor::zeros((1, d_small, d_small), DType::F32, &device)?;
         let mut current_token = encoded[0];
 
         // Warmup: Feed prompt history
