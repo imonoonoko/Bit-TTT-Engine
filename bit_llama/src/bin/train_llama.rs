@@ -100,17 +100,19 @@ fn main() -> Result<()> {
     let device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);
     println!("Device: {:?}", device);
 
-    // 1. Data
-    let data_path = &args.data;
-    if !Path::new(data_path).exists() {
-        // Fallback or error?
-        // anyhow::bail!("Data not found: {}", data_path);
-        // User might run from root, let's try prefixing with ../ if not found
-        // But for now, just error or standard path logic
+    // 1. Data (with fallback for different working directories)
+    let mut data_path = args.data.clone();
+    if !Path::new(&data_path).exists() {
+        // Fallback: try prefixing with bit_llama/ (if running from Bit-TTT/)
+        let fallback = format!("bit_llama/{}", &args.data);
+        if Path::new(&fallback).exists() {
+            data_path = fallback;
+            println!("Using fallback data path: {}", data_path);
+        } else {
+            anyhow::bail!("Data not found at '{}' or '{}'", args.data, fallback);
+        }
     }
-    // ... logic continues ...
-    // Using args.data instead of hardcoded string
-    let mut loader = DataLoader::new(data_path)?;
+    let mut loader = DataLoader::new(&data_path)?;
     println!("Data Loaded. Total tokens: {}", loader.data.len());
 
     // 2. Model
