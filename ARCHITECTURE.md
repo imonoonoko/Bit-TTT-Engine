@@ -23,13 +23,13 @@ The project is structured as a **Hybrid Architecture** to maximize performance a
 
 ```mermaid
 graph TD
-    A[Python / Unity / C#] -->|C-ABI| B(Rust Core Engine)
-    B -->|SIMD/AVX2| C[CPU Hardware]
+    A["Python / Unity / C#"] -->|C-ABI| B["Rust Core Engine"]
+    B -->|SIMD/AVX2| C["CPU Hardware"]
     
     subgraph Rust Core
-    D[BitLinear Layer]
-    E[TTT Layer]
-    F[Optimizer (AdamW-Lite)]
+    D["BitLinear Layer"]
+    E["TTT Layer"]
+    F["Optimizer (AdamW-Lite)"]
     end
     
     B --> D
