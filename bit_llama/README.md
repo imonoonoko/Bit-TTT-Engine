@@ -68,78 +68,29 @@ cargo run --release --bin inference_llama
 
 ## 🔌 Python Integration (外部連携)
 Bit-TTT Engine は Python から DLL (`.so`/`.dylib`) として直接呼び出し可能です。
-
-### Minimal Example
-```python
-import ctypes
-import platform
-
-# 1. Load Library
-lib_name = "Bit_TTT.dll" if platform.system() == "Windows" else "libBit_TTT.so"
-lib = ctypes.CDLL(f"./target/release/{lib_name}")
-
-# 2. Define API
-lib.ttt_create.argtypes = [ctypes.c_size_t, ctypes.c_float]
-lib.ttt_create.restype = ctypes.c_void_p
-lib.ttt_forward.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.c_size_t, ctypes.POINTER(ctypes.c_float)]
-lib.ttt_forward.restype = ctypes.c_int # Returns 0 on Success
-
-# 3. Run
-dim = 64
-model = lib.ttt_create(dim, 0.1)
-# ... forward pass ... (check ret == 0)
-```
-> ※ 詳細な仕様は `release/benchmark.py` を参照してください。
-
-### C-ABI Error Codes
-
-| Code | Name | Description |
-|---|---|---|
-| **0** | `Ok` | Success |
-| **1** | `NullPointer` | Input pointer was null |
-| **2** | `DimensionMismatch` | Input array size validation failed |
-| **99** | `Panic` | Internal Rust panic caught (Safety net) |
-
-## ⚡ Performance (性能)
-
-Bit-TTT (Core Engine) は、Rust + SIMD最適化により極めて高速に動作します。
-
-| Metric | Value | Note |
-|---|---|---|
-| **Inference Speed** | **~34,000 TPS** | CPU Single Thread (Ryzen/Intel) |
-| **Memory Footprint** | **Extremely Low** | 1.58bit quantization ready |
-| **Startup Time** | **< 10ms** | No heavy runtime loaded |
-
-> **Benchmark**: `python release/benchmark.py` で手元の環境のスコアを計測できます。
-
-## 🧠 Model Specs (モデル仕様)
-
-| Item | Specification | Note |
-|---|---|---|
-| **Architecture** | **Stack-Bit-TTT** | 1.58-bit BitNet + TTT (Test-Time Training) |
-| **Components** | RMSNorm / SwiGLU / Residual | Modern Llama-like blocks |
-| **Size** | **~11.7 M Params** | TinyStories Specialized (D=256, L=4) |
-| **Quantization** | **1.58-bit** (Ternary) | Weights are `{-1, 0, 1}` |
-| **Training** | **Hybrid (GPU/CPU)** | Train on CUDA, Infer on CPU |
+(詳細は RootのREADMEを参照してください)
 
 ---
 
-## ⚙️ システム設定 (Cargo.toml)
-*   **CUDA機能の切り替え**:
-    *   学習時は `--features cuda` を付けることでGPUを有効化。
-    *   推論時は指定なしでCPUモード（コンパイルエラー回避）。
-*   **依存ライブラリ**: `tokenizers` を v0.22 に更新し、Python側との互換性を確保。
+## 💎 Pre-trained Models (配布計画)
+
+現在、以下のモデルの学習と公開を計画しています。
+
+| Model Name | Specs | Training Data | Status | Download |
+|---|---|---|---|---|
+| **Bit-Llama-Micro** | ~11M Params, 1.58bit | TinyStories (Mini) | 🟡 **Training** | *Coming Soon* |
+| **Bit-Llama-Code** | ~100M Params, 1.58bit | Python Code Snippets | ⚪ Planned | - |
+
+> **Note**: 学習済み重み (`.safetensors`) は Hugging Face Hub での公開を予定しています。
 
 ---
 
-## 📊 現状のステータス
-*   **学習進捗**: Step 150 / 1000
-*   **Loss**: 4.15 付近
-*   **能力**:
-    *   単語の羅列から、「文章らしきもの」へ進化中。
-    *   入力: `Once upon a time`
-    *   出力: `"I'm glad you can..."` など、意味のあるフレーズが出現。
+## 📊 現状のステータス (Metrics)
+*   **Training Speed**: ~800 tokens/sec (RTX 3060 Mobile)
+*   **Loss Curve**: Smooth convergence observed at Step 150 (Loss: 4.15).
+*   **Generation**: "Always" -> "Alice" -> "Alice was very tired..." (Context learning observed).
 
-## 🚀 次のステップ
-1.  **学習の完走**: Step 1000まで回し、Loss 3.0以下を目指す。
-2.  **デスクトップアプリへの移植**: この「脳」をAliceに移植する（Phase 13 Step 5）。
+## 🚀 Future Roadmap
+1.  **Distributed Training**: Implement Data Parallelism for multi-GPU training.
+2.  **Hugging Face Integration**: Provide `from_pretrained("bit-ttt/llama-11m")` API.
+3.  **Desktop App**: Integrate into "Alice" desktop assistant (Phase 13 Step 5).
