@@ -123,8 +123,9 @@ fn main() -> Result<()> {
         // Warmup: Feed prompt history
         for (_i, &t) in encoded.iter().enumerate() {
             let input_t = Tensor::new(&[t], &device)?;
-            let x = embedding.forward(&input_t)?.squeeze(0)?;
-            let (w_new, _) = ttt_layer.forward_update(&w_state, &x)?;
+            let x = embedding.forward(&input_t)?; // (1, D)
+                                                  // Fix: w_new is the second return value
+            let (_out_feat, w_new) = ttt_layer.forward_update(&w_state, &x)?;
             w_state = w_new;
             current_token = t;
         }
@@ -133,26 +134,16 @@ fn main() -> Result<()> {
         print!("{} -> ", prompt);
         for _ in 0..20 {
             let input_t = Tensor::new(&[current_token], &device)?;
-            let x = embedding.forward(&input_t)?.squeeze(0)?;
+            let x = embedding.forward(&input_t)?; // (1, D)
 
-            // Forward (Update)
-            let (w_new, _) = ttt_layer.forward_update(&w_state, &x)?;
+            // Forward (Update + Predict)
+            // Fix: w_new is the second return value
+            let (out_feat, w_new) = ttt_layer.forward_update(&w_state, &x)?;
 
-            // Predict
-            let feat = ttt_layer.proj_down.forward(&x)?;
-            let norm = feat.sqr()?.sum_all()?.sqrt()?;
-            let norm_val = norm.to_scalar::<f32>()?;
-            let feat_norm = if norm_val > 1e-6 {
-                (feat / (norm_val as f64))?
-            } else {
-                feat
-            };
-
-            let pred_inner = w_state.matmul(&feat_norm.unsqueeze(1)?)?.squeeze(1)?;
-            let out_feat = ttt_layer.proj_up.forward(&pred_inner)?;
+            // Residual Connection
             let hidden = (out_feat + x)?;
 
-            let logits = lm_head.forward(&hidden.unsqueeze(0)?)?;
+            let logits = lm_head.forward(&hidden)?;
             let probs = candle_nn::ops::softmax(&logits, 1)?;
             let next_token = probs.argmax(1)?.squeeze(0)?.to_scalar::<u32>()?;
 
