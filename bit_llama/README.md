@@ -15,6 +15,7 @@ TinyStoriesデータセットを用いて、「物語を語る能力」の獲得
     *   `TTTLayer` のバッチ処理対応（`B, T, D`）。
     *   `RMSNorm` と `SwiGLU` (MLP) の実装による表現力向上。
     *   残差接続（Residual Connections）の導入。
+    *   **注意**: 本クレートは `../rust_engine` のコアライブラリを参照しています。フォルダ構成を変更せず、 `Bit-TTT` フォルダごとお使いください。
 
 ### 2. **データ準備 (教材)**
 *   **ファイル**: `data_prep/prepare_tinystories.py`

@@ -6,15 +6,39 @@ import random
 import math
 
 # --- 1. Load DLL ---
-dll_name = "Bit_TTT.dll"
-dll_path = os.path.join(os.path.dirname(__file__), dll_name)
+import platform
+system = platform.system()
+if system == "Windows":
+    lib_name = "Bit_TTT.dll"
+elif system == "Darwin":
+    lib_name = "libBit_TTT.dylib"
+else:
+    lib_name = "libBit_TTT.so"
+
+# Locate the library
+# Try current directory first, then target/release
+possible_paths = [
+    os.path.join(os.path.dirname(__file__), lib_name),
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../target/release", lib_name))
+]
+
+dll_path = None
+for p in possible_paths:
+    if os.path.exists(p):
+        dll_path = p
+        break
+
+if not dll_path:
+    print(f"Error: {lib_name} not found in current dir or ../target/release.")
+    print("Please build the project first: `cargo build --release`")
+    sys.exit(1)
 
 print(f"Loading DLL from: {dll_path}")
 
 try:
     lib = ctypes.CDLL(dll_path)
-except FileNotFoundError:
-    print(f"Error: {dll_name} not found. Make sure you built the Release version and copied it here.")
+except OSError as e:
+    print(f"Error loading {lib_name}: {e}")
     sys.exit(1)
 
 # --- 2. Define C Arguments ---

@@ -11,8 +11,7 @@ use core_engine::TTTLayer;
 fn main() -> Result<()> {
     println!("--- Bit-TTT: First Utterance (Alice) ---");
     // 1. Setup Device (Auto-detect CUDA)
-    // CPU for Desktop Build compatibility
-    let device = Device::Cpu;
+    let device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);
     println!("Using Device: {:?}", device);
 
     // 2. Data Prep
