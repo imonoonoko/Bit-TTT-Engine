@@ -1,8 +1,8 @@
 # Bit-Llama Construction Report (Phase 13)
 
 ## 📌 プロジェクト概要
-**「Bit-Llama」** は、Bit-TTTエンジン（1.58bit量子化 + TTTレイヤー）を多層化・スケールアップさせ、言語モデルとしての能力を持たせたプロトタイプです。
-TinyStoriesデータセットを用いて、「物語を語る能力」の獲得を目指しています。
+(Work In Progress)
+
 
 ---
 

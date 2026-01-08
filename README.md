@@ -22,7 +22,7 @@
 *   **Safe**: Safe C-ABI with error codes and documented safety contracts.
 
 ## Project Components
-- **[`bit_llama/`](bit_llama/)**: (New!) Pure Rust implementation of "Bit-Llama" (Stacked Bit-TTT). Supports GPU training and TinyStories generation.
+
 - **[`rust_engine/`](rust_engine/)**: Core logic optimized for C-ABI (DLL generation).
 - **[`examples/`](examples/)**: Minimal usage examples (Python etc).
 - **[`python_proto/`](python_proto/)**: Original Python prototype for research.
@@ -92,7 +92,7 @@ void ttt_destroy(void* model);
 *   **安全**: エラーコードによる例外制御と、明確な安全性保証を備えています。
 
 ## プロジェクト構成
-- **[`bit_llama/`](bit_llama/)**: (New!) "Bit-Llama" (多層化Bit-TTT) のPure Rust実装。GPU学習とTinyStories生成に対応しています。
+
 - **[`rust_engine/`](rust_engine/)**: C-ABI (DLL生成) に最適化されたコアロジックです。
 - **[`examples/`](examples/)**: Python等からの最小利用例です。
 - **[`python_proto/`](python_proto/)**: 研究用の初期Pythonプロトタイプです。
