@@ -19,7 +19,7 @@ except AttributeError:
 # Verify Instantiation (Expect error due to missing file, but checks signature)
 try:
     # This should fail in Rust loading the file, returning PyRuntimeError or PyValueError
-    model = cortex_rust.BitLlama(config, "non_existent_model.safetensors")
+    model = cortex_rust.BitLlama(config, "non_existent_model.safetensors", device="cpu")
 except Exception as e:
     print(f"✅ Caught expected error during model load (shows signatures match): {e}")
 

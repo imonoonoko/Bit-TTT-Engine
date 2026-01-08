@@ -382,10 +382,24 @@ pub struct PyBitLlama {
 #[pymethods]
 impl PyBitLlama {
     #[new]
-    pub fn new(config: BitLlamaConfig, checkpoint_path: &str) -> PyResult<Self> {
-        // Use CPU for now for simplicity, or CUDA if available?
-        // Let's stick to CPU or auto-detect.
-        let device = candle_core::Device::Cpu;
+    #[pyo3(signature = (config, checkpoint_path, device=None))]
+    pub fn new(
+        config: BitLlamaConfig,
+        checkpoint_path: &str,
+        device: Option<&str>,
+    ) -> PyResult<Self> {
+        let device = match device {
+            Some("cuda") => candle_core::Device::new_cuda(0).map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("CUDA error: {}", e))
+            })?,
+            Some("cpu") | None => candle_core::Device::Cpu,
+            Some(unknown) => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "Unsupported device: {}. Use 'cpu' or 'cuda'",
+                    unknown
+                )))
+            }
+        };
 
         let vb = unsafe {
             candle_nn::VarBuilder::from_mmaped_safetensors(&[checkpoint_path], DType::F32, &device)
