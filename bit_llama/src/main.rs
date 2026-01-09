@@ -1,3 +1,8 @@
+//! Bit-Llama Streaming Inference CLI
+//!
+//! Command-line tool for interactive text generation using the Bit-Llama model.
+//! Usage: cargo run --bin bit_llama -- --model <path> --prompt "Hello"
+
 use anyhow::Result;
 use clap::Parser;
 use cortex_rust::Llama;

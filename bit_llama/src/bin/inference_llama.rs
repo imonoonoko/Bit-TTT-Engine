@@ -5,14 +5,18 @@ use std::io::{self, Write};
 use std::path::Path;
 use tokenizers::Tokenizer;
 
-// Import core engine
-// Import core engine
-// #[path = "../core_engine.rs"]
-// mod core_engine;
 use cortex_rust::{BitLlama, BitLlamaConfig};
 
+// ============================================================
+// Model Configuration Constants
+// ============================================================
+/// Model hidden dimension (embedding size).
 const DIM: usize = 256;
+
+/// Number of transformer blocks (layers).
 const LAYERS: usize = 4;
+
+/// Vocabulary size. Must match the BPE tokenizer.
 const VOCAB: usize = 16384;
 
 fn main() -> Result<()> {

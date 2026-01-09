@@ -1,12 +1,27 @@
+//! Core Engine for Bit-Llama Model
+//!
+//! This module contains the primary implementation of the Bit-Llama architecture:
+//! - BitLinear (1.58-bit quantized linear layer)
+//! - SwiGLU (MLP activation)
+//! - TTTLayer (Test-Time Training with online learning)
+//! - BitLlamaBlock and BitLlama (full model)
+
 use candle_core::{DType, Module, Result, Tensor};
 use candle_nn::VarBuilder;
 use serde::Deserialize;
 use std::path::Path;
 use tokenizers::Tokenizer;
 
-// --- Constants ---
+// ============================================================
+// Constants
+// ============================================================
+/// Epsilon for RMSNorm numerical stability.
 const RMS_NORM_EPS: f64 = 1e-5;
+
+/// Epsilon for TTT layer normalization.
 const TTT_NORM_EPS: f32 = 1e-6;
+
+/// Minimum temperature for sampling to prevent division by zero.
 const TEMP_MIN: f64 = 1e-6;
 
 // --- Helper Trait for Robust Operations ---
@@ -16,11 +31,26 @@ trait TensorExt {
 
 impl TensorExt for Tensor {
     fn matmul_robust(&self, rhs: &Tensor) -> Result<Tensor> {
-        if self.rank() == 1 {
+        let lhs = self.contiguous()?;
+        let rhs = rhs.contiguous()?;
+        let lhs_rank = lhs.rank();
+
+        if lhs_rank == 1 {
             // [D] @ [D, Out] -> [Out]
-            self.unsqueeze(0)?.matmul(rhs)?.squeeze(0)
+            lhs.unsqueeze(0)?.matmul(&rhs)?.squeeze(0)
+        } else if lhs_rank == 2 {
+            lhs.matmul(&rhs)
         } else {
-            self.matmul(rhs)
+            // [B, T, D] @ [D, Out] -> [B, T, Out]
+            // Flatten to [B*T, D]
+            // Generic Flatten:
+            let flattened = lhs.flatten(0, lhs_rank - 2)?; // [Batch*, D]
+            let out = flattened.matmul(&rhs)?; // [Batch*, Out]
+
+            // Reshape back
+            let mut new_shape = lhs.dims()[..lhs_rank - 1].to_vec();
+            new_shape.push(out.dim(1)?);
+            out.reshape(new_shape)
         }
     }
 }
@@ -232,6 +262,88 @@ impl TTTLayer {
 
         Ok((out_feat, w_new))
     }
+
+    // --- Parallel Chunkwise Implementation ---
+    // x: (B, T, Hidden)
+    // w_state: (B, D_small, D_small) aka w_init (usually zeros)
+    // Returns: (output: (B, T, Hidden), w_final: (B, D_small, D_small))
+    pub fn forward_chunkwise(
+        &self,
+        w_state: &Tensor,
+        x: &Tensor,
+        chunk_size: usize,
+    ) -> Result<(Tensor, Tensor)> {
+        // 1. Project Down (All tokens at once) -> (B, T, D_small)
+        let feat = self.proj_down.forward(x)?;
+
+        // Normalize
+        let norm = feat.sqr()?.sum_keepdim(2)?.sqrt()?;
+        let norm = norm.broadcast_add(&Tensor::new(&[TTT_NORM_EPS], x.device())?)?;
+        let feat_norm = feat.broadcast_div(&norm)?; // (B, T, D_small)
+
+        let (_b_sz, t_len, _d_small) = feat_norm.dims3()?;
+        let mut current_w = w_state.clone();
+        let mut outputs = Vec::new();
+
+        // 2. Chunk Loop
+        // We iterate over chunks of size `chunk_size`
+        // Using chunks means:
+        //   - Z_chunk = W_curr @ X_chunk^T  Matrix-Matrix (B, D, D) @ (B, D, C) -> (B, D, C)
+        //   - Grad = (Z - X) @ X^T          Matrix-Matrix (B, D, C) @ (B, C, D) -> (B, D, D)
+        //   - W_next = W_curr - lr * Grad
+
+        // Ensure we handle T not divisible by chunk_size if necessary (input.chunk handles this)
+        // But manual iteration is safer for reshaping logic.
+        let num_chunks = (t_len + chunk_size - 1) / chunk_size;
+
+        for i in 0..num_chunks {
+            let start = i * chunk_size;
+            let len = std::cmp::min(chunk_size, t_len - start);
+
+            // Get Chunk: (B, C, D_small)
+            let x_chunk = feat_norm.narrow(1, start, len)?;
+
+            // Prepare for Matrix Mul: (B, D, C)
+            // x_chunk_t: (B, D, C)
+            let x_chunk_t = x_chunk.transpose(1, 2)?;
+
+            // Forward: Z = W @ X^T
+            // (B, D, D) @ (B, D, C) = (B, D, C)
+            let z_chunk_t = current_w.matmul(&x_chunk_t)?;
+
+            // Transpose back for diff: (B, C, D)
+            let z_chunk = z_chunk_t.transpose(1, 2)?;
+
+            // Grad: G = (Z - X) @ X or similar?
+            // Diff: (B, C, D)
+            let diff = (&z_chunk - &x_chunk)?;
+
+            // Update Rule: W_next = W - eta * (z-x) @ x^T
+            // diff: (B, C, D). x_chunk: (B, C, D)
+            // We want (B, D, D) update.
+            // diff.T @ x_chunk ?? No.
+            // Update is sum of outer products: sum_t (z_t - x_t) * x_t^T
+            // Matrix form: (Z_chunk - X_chunk)^T @ X_chunk ??
+            // (B, D, C) @ (B, C, D) -> (B, D, D). Correct.
+            // diff is (B, C, D). diff_t is (B, D, C).
+            let diff_t = diff.transpose(1, 2)?;
+            let grad = diff_t.matmul(&x_chunk)?; // (B, D, D)
+
+            // Update W
+            current_w = (current_w - grad * self.inner_lr)?;
+
+            // Store Z_chunk as output (before project up)
+            outputs.push(z_chunk);
+        }
+
+        // 3. Concat Outputs -> (B, T, D_small)
+        let pred_all = Tensor::cat(&outputs, 1)?;
+
+        // 4. Project Up -> (B, T, Hidden)
+        let out_feat = self.proj_up.forward(&pred_all)?;
+
+        Ok((out_feat, current_w))
+    }
 }
 
 // --- BitLlama Block ---
@@ -281,6 +393,28 @@ impl BitLlamaBlock {
         let x_out = (residual + mlp_out)?;
 
         Ok((x_out, w_new))
+    }
+
+    pub fn forward_chunkwise(
+        &self,
+        x: &Tensor,
+        w_state: &Tensor,
+        chunk_size: usize,
+    ) -> Result<(Tensor, Tensor)> {
+        // 1. TTT Branch (Chunkwise)
+        let residual = x;
+        let x_norm = self.norm1.forward(x)?;
+        let (ttt_out, w_final) = self.ttt.forward_chunkwise(w_state, &x_norm, chunk_size)?;
+        let x_mid = (residual + ttt_out)?;
+
+        // 2. MLP Branch (Standard Batch Linear)
+        // MLP matches input shape (B, T, D) -> (B, T, D)
+        let residual = &x_mid;
+        let x_norm2 = self.norm2.forward(&x_mid)?;
+        let mlp_out = self.mlp.forward(&x_norm2)?;
+        let x_out = (residual + mlp_out)?;
+
+        Ok((x_out, w_final))
     }
 }
 
@@ -396,6 +530,36 @@ impl BitLlama {
         let w = self.lm_head.weight();
         // Since candle_nn::Linear::forward failed on 1D, we use our robust matmul.
         let logits = h_norm.matmul_robust(&w.t()?)?;
+        Ok(logits)
+    }
+
+    // Forward Chunkwise (Parallel Training)
+    // x: (B, T)
+    // w_states: Initial states (usually zeros). Will be updated to final states?
+    // Actually, for training, we usually discard final state or use it for next sequence.
+    // Here we return logits (B, T, V).
+    pub fn forward_chunkwise(
+        &self,
+        x: &Tensor,
+        w_states: &mut [Tensor],
+        chunk_size: usize,
+    ) -> Result<Tensor> {
+        // Embed: (B, T) -> (B, T, D)
+        let mut h = self.embedding.forward(x)?;
+
+        for (i, layer) in self.layers.iter().enumerate() {
+            let (h_new, w_final) = layer.forward_chunkwise(&h, &w_states[i], chunk_size)?;
+            h = h_new;
+            w_states[i] = w_final;
+        }
+
+        let h_norm = self.norm.forward(&h)?;
+
+        // LM Head: (B, T, D) @ (V, D)^T -> (B, T, V)
+        // Use matmul_robust to handle 3D input
+        let w = self.lm_head.weight();
+        let logits = h_norm.matmul_robust(&w.t()?)?;
+
         Ok(logits)
     }
 }

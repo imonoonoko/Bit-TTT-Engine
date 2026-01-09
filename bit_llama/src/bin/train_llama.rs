@@ -1,8 +1,9 @@
 use anyhow::Result;
 use candle_core::{DType, Device, Tensor};
-use candle_nn::{Module, Optimizer, VarBuilder, VarMap};
+use candle_nn::{Optimizer, VarBuilder, VarMap};
+use memmap2::Mmap; // Import memmap2
 use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -12,33 +13,47 @@ use std::sync::Arc;
 // mod core_engine;
 use cortex_rust::{BitLlama, BitLlamaConfig};
 
-const CONTEXT_LEN: usize = 128; // Reduced for speed (Loop overhead)
-const BATCH_SIZE: usize = 32; // Optimized for 8GB VRAM (Sweet spot?)
+// ============================================================
+// Training Configuration Constants
+// ============================================================
+/// Maximum sequence length per batch (tokens).
+/// Reduced for faster iteration; increase for better context modeling.
+const CONTEXT_LEN: usize = 128;
+
+/// Batch size. Optimized for 8GB VRAM GPUs.
+const BATCH_SIZE: usize = 32;
+
+/// Model hidden dimension (embedding size).
 const DIM: usize = 256;
+
+/// Number of transformer blocks (layers).
 const LAYERS: usize = 4;
-const VOCAB: usize = 16384; // Matches our BPE
+
+/// Vocabulary size. Must match the BPE tokenizer.
+const VOCAB: usize = 16384;
 
 // Data Loader
 struct DataLoader {
-    data: Vec<u16>,
+    _file: File,     // Keep file handle alive (prefixed with _ to suppress warning)
+    mmap: Mmap,      // Memory map
+    data_len: usize, // count of u16 elements
     cursor: usize,
 }
 
 impl DataLoader {
     fn new(path: &str) -> Result<Self> {
-        let f = File::open(path)?;
-        let mut reader = BufReader::new(f);
-        let mut buffer = Vec::new();
-        reader.read_to_end(&mut buffer)?;
+        let file = File::open(path)?;
+        let mmap = unsafe { Mmap::map(&file)? };
 
-        // Convert u8 buffer to u16
-        // Assumes Little Endian (from numpy tobytes)
-        let data: Vec<u16> = buffer
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
-            .collect();
+        // バイト数からu16の要素数を計算
+        let data_len = mmap.len() / 2;
 
-        Ok(Self { data, cursor: 0 })
+        Ok(Self {
+            _file: file,
+            mmap,
+            data_len,
+            cursor: 0,
+        })
     }
 
     fn next_batch(
@@ -47,25 +62,34 @@ impl DataLoader {
         len: usize,
         device: &Device,
     ) -> Result<(Tensor, Tensor)> {
-        let mut inputs = Vec::new();
-        let mut targets = Vec::new();
+        let mut inputs = Vec::with_capacity(batch_size * len);
+        let mut targets = Vec::with_capacity(batch_size * len);
 
         for _ in 0..batch_size {
-            if self.cursor + len + 1 >= self.data.len() {
+            if self.cursor + len + 1 >= self.data_len {
                 self.cursor = 0; // Reset
             }
-            let chunk = &self.data[self.cursor..self.cursor + len + 1];
-            inputs.extend_from_slice(&chunk[0..len]);
-            targets.extend_from_slice(&chunk[1..len + 1]);
+
+            // Mmapからスライスを取得し、u8 -> u16 -> u32 に変換
+            let start = self.cursor * 2;
+            let end = (self.cursor + len + 1) * 2;
+            let chunk_u8 = &self.mmap[start..end];
+
+            // chunk_u8 を u16 のイテレータとして扱う
+            let chunk_u16: Vec<u16> = chunk_u8
+                .chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect();
+
+            // Fix: Candle doesn't support u16 tensors. Convert to u32.
+            inputs.extend(chunk_u16[0..len].iter().map(|&x| x as u32));
+            targets.extend(chunk_u16[1..len + 1].iter().map(|&x| x as u32));
+
             self.cursor += len;
         }
 
-        // Fix: Candle doesn't support u16 tensors. Convert to u32.
-        let inputs_u32: Vec<u32> = inputs.iter().map(|&x| x as u32).collect();
-        let targets_u32: Vec<u32> = targets.iter().map(|&x| x as u32).collect();
-
-        let inp_tensor = Tensor::from_slice(&inputs_u32, (batch_size, len), device)?;
-        let tgt_tensor = Tensor::from_slice(&targets_u32, (batch_size, len), device)?;
+        let inp_tensor = Tensor::from_slice(&inputs, (batch_size, len), device)?;
+        let tgt_tensor = Tensor::from_slice(&targets, (batch_size, len), device)?;
 
         Ok((inp_tensor, tgt_tensor))
     }
@@ -100,16 +124,60 @@ struct Args {
     load: Option<String>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct TrainingState {
+    step: usize,
+    loss: f32,
+    #[allow(dead_code)]
+    date: String,
+    #[allow(dead_code)]
+    checkpoint: String, // Relative path filename
+}
+
+fn save_training_state(
+    base_dir: &str,
+    filename_no_ext: &str,
+    step: usize,
+    loss: f32,
+) -> Result<()> {
+    let safetensors_name = format!("{}.safetensors", filename_no_ext);
+    let json_name = format!("{}.json", filename_no_ext);
+
+    let state = TrainingState {
+        step,
+        loss,
+        date: chrono::Local::now().to_rfc3339(),
+        checkpoint: safetensors_name,
+    };
+
+    let path = format!("{}{}", base_dir, json_name);
+    let file = File::create(&path)?;
+    serde_json::to_writer_pretty(file, &state)?;
+
+    // Also update generic "training_state.json" for easy resuming
+    let generic_path = format!("{}training_state.json", base_dir);
+    if let Ok(file) = File::create(&generic_path) {
+        let _ = serde_json::to_writer_pretty(file, &state);
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
+
+    // ============================================================
+    // Section 1: Initialization
+    // ============================================================
     println!("--- Bit-Llama Training (TinyStories) ---");
     println!(
         "Config: LR={}, Steps={}, Data={}",
         args.lr, args.steps, args.data
     );
 
+    println!("Initializing Device...");
     let device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);
-    println!("Device: {:?}", device);
+    println!("Device initialized: {:?}", device);
 
     // 1. Data (with fallback for different working directories)
     let mut data_path = args.data.clone();
@@ -124,9 +192,11 @@ fn main() -> Result<()> {
         }
     }
     let mut loader = DataLoader::new(&data_path)?;
-    println!("Data Loaded. Total tokens: {}", loader.data.len());
+    println!("Data Loaded. Total tokens: {}", loader.data_len);
 
-    // 2. Model
+    // ============================================================
+    // Section 2: Model Setup
+    // ============================================================
     let config = BitLlamaConfig {
         vocab_size: VOCAB,
         hidden_dim: DIM,
@@ -206,7 +276,9 @@ fn main() -> Result<()> {
         }
     }
 
-    // 4. Loop
+    // ============================================================
+    // Section 3: Training Loop
+    // ============================================================
     let log_interval = 10;
     let save_interval = args.save_interval;
     println!(
@@ -239,7 +311,24 @@ fn main() -> Result<()> {
     let mut best_loss = f32::MAX;
     let mut checkpoint_history: Vec<String> = Vec::new(); // Rolling checkpoints
 
+    // Verify CWD
+    if let Ok(cwd) = std::env::current_dir() {
+        println!("CWD: {:?}", cwd);
+    }
+
     for step in start_step..total_steps {
+        // 0. Early Stop Check (Before Data Loading)
+        if Path::new("stop_signal").exists() {
+            println!("\n🛑 Stop signal detected (Start of Loop)! Saving and exiting...");
+            let _ = std::fs::remove_file("stop_signal");
+            varmap.save(&format!("{}bit_llama_checkpoint.safetensors", base_dir))?;
+            let state = serde_json::json!({ "step": step });
+            if let Ok(file) = File::create(&state_path) {
+                serde_json::to_writer(file, &state)?;
+            }
+            return Ok(());
+        }
+
         // Automatic Warmup for Resume (100 steps)
         // --- Learning Rate Schedule (Warmup + Cosine Decay) ---
         let current_lr = if step < args.warmup_steps {
@@ -267,12 +356,20 @@ fn main() -> Result<()> {
         adam.set_learning_rate(current_lr);
         // -----------------------------------------------------
 
+        /* Debug Logs - Temporarily commented out for speed
         if step < start_step + 5 || step % 10 == 0 {
             println!("Step {:4} | LR: {:.7} | Loading batch...", step, current_lr);
             std::io::stdout().flush().ok();
         }
+        */
 
         let (inputs, targets) = loader.next_batch(BATCH_SIZE, CONTEXT_LEN, &device)?;
+        /*
+        if step < start_step + 5 || step % 10 == 0 {
+            println!("Step {:4} | Batch loaded. Starting forward pass...", step);
+            std::io::stdout().flush().ok();
+        }
+        */
         // Shape: (B, T)
 
         // Reset Fast Weights for Batch
@@ -287,67 +384,97 @@ fn main() -> Result<()> {
             )?);
         }
 
-        let mut loss_step = Tensor::new(0.0f32, &device)?;
+        // let mut loss_step = Tensor::new(0.0f32, &device)?; // Unused initialization removed
 
-        // Recursive Forward (Token by Token)
-        let _batch_loss_accum = 0.0;
+        // Recursive Forward (Token by Token) -> NOW CHUNKWISE PARALLEL
+        // let _batch_loss_accum = 0.0; // Unused
 
-        // Input: (B, T). We iterate t.
-        for t in 0..CONTEXT_LEN {
-            // Forward Pass
-            let input_col = inputs.narrow(1, t, 1)?.squeeze(1)?.contiguous()?; // (B)
-            let target_col = targets.narrow(1, t, 1)?.squeeze(1)?.contiguous()?; // (B)
+        let chunk_size = 32; // Mini-batch size for TTT
 
-            let mut h = model.embedding.forward(&input_col)?; // (B, D)
+        // forward_chunkwise returns logits: (B, T, Vocab)
+        let logits = model.forward_chunkwise(&inputs, &mut w_states, chunk_size)?;
 
-            // Pass through layers (TTT Update + Residual)
-            for (l_idx, layer) in model.layers.iter().enumerate() {
-                let (h_new, w_new) = layer.forward(&h, &w_states[l_idx])?;
-                h = h_new;
-                w_states[l_idx] = w_new;
-            }
+        // Loss Calculation: Cross Entropy over Flattened Tensors
+        // Logits: (B*T, V)
+        // Targets: (B*T)
+        let logits_flat = logits.reshape((BATCH_SIZE * CONTEXT_LEN, VOCAB))?;
+        let targets_flat = targets.reshape(BATCH_SIZE * CONTEXT_LEN)?;
 
-            let h_norm = model.norm.forward(&h)?;
-            let logits = model.lm_head.forward(&h_norm)?; // (B, V)
+        // loss_step is currently (B*T) from cross_entropy?
+        // Check candle docs: cross_entropy returns tensor.
+        let loss_vec = candle_nn::loss::cross_entropy(&logits_flat, &targets_flat)?;
+        let loss_step = loss_vec.mean_all()?; // Scalar average loss
 
-            let loss = candle_nn::loss::cross_entropy(&logits, &target_col)?;
-            loss_step = (loss_step + loss)?;
-        }
-
-        // Backprop on Total Loss / T
-        let loss_scaled = (loss_step / (CONTEXT_LEN as f64))?;
-        adam.backward_step(&loss_scaled)?;
-
-        // Log loss + Best model check
-        let val = loss_scaled.to_scalar::<f32>()?;
-        if step % log_interval == 0 {
-            println!("Step {:4} | Loss: {:.4}", step, val);
+        /*
+        if step < start_step + 5 || step % 10 == 0 {
+            println!(
+                "Step {:4} | Forward complete. Starting backward pass...",
+                step
+            );
             std::io::stdout().flush().ok();
         }
+        */
 
-        // 🏆 Best Model Saving (Check every 50 steps to reduce SSD writes)
-        if step % 50 == 0 && step > 0 && val < best_loss {
-            best_loss = val;
-            println!(
-                "🏆 New best loss: {:.4} (Step {}) - Saving model_best.safetensors",
-                val, step
-            );
-            varmap.save(&format!("{}model_best.safetensors", base_dir))?;
+        // --- OPTIMIZATION: Check Loss only at log interval ---
+        let mut loss_val_check = 0.0;
+
+        // ログ出力タイミングのみ同期して値をチェックする (速度重視)
+        if step % log_interval == 0 {
+            loss_val_check = loss_step.to_scalar::<f32>()?;
+            if loss_val_check.is_nan() {
+                anyhow::bail!("Step {} | Loss is NaN! Stopping training.", step);
+            }
+        }
+        // ------------------------------------------
+
+        // Backprop on Mean Loss
+        adam.backward_step(&loss_step)?;
+
+        /*
+        if step < start_step + 5 || step % 10 == 0 {
+            println!("Step {:4} | Backward complete.", step);
+            std::io::stdout().flush().ok();
+        }
+        */
+
+        // Log loss
+        if step % log_interval == 0 {
+            let val = loss_val_check; // Already mean
+            println!("Step {:4} | Loss: {:.4}", step, val);
+            std::io::stdout().flush().ok();
+
+            // 🏆 Best Model Saving (Check every 50 steps to reduce SSD writes)
+            // Loss値をチェックした時だけ更新判定
+            if step % 50 == 0 && step > 0 && val < best_loss {
+                best_loss = val;
+                println!(
+                    "🏆 New best loss: {:.4} (Step {}) - Saving model_best.safetensors",
+                    val, step
+                );
+                varmap.save(&format!("{}model_best.safetensors", base_dir))?;
+                save_training_state(&base_dir, "model_best", step, val)?;
+            }
         }
 
         // Check for 'stop_signal' file (Graceful Shutdown from GUI)
-        if Path::new("stop_signal").exists() {
-            println!("\n🛑 Stop signal detected! Saving and exiting...");
+        let stop_path = Path::new("stop_signal");
+        if stop_path.exists() {
+            if let Ok(abs_path) = std::fs::canonicalize(stop_path) {
+                println!(
+                    "\n🛑 Stop signal detected at {:?}! Saving and exiting...",
+                    abs_path
+                );
+            } else {
+                println!("\n🛑 Stop signal detected! Saving and exiting...");
+            }
 
             // 1. Remove signal file
             let _ = std::fs::remove_file("stop_signal");
 
             // 2. Save checkpoint
+            // 2. Save checkpoint
             varmap.save(&format!("{}bit_llama_checkpoint.safetensors", base_dir))?;
-            let state = serde_json::json!({ "step": step });
-            if let Ok(file) = File::create(&state_path) {
-                serde_json::to_writer(file, &state)?;
-            }
+            save_training_state(&base_dir, "bit_llama_checkpoint", step, loss_val_check)?;
 
             println!("✅ Saved successfully. Exiting.");
             return Ok(());
@@ -355,21 +482,31 @@ fn main() -> Result<()> {
 
         // ♻️ Save checkpoint at interval (Rolling Checkpoints)
         if step % save_interval == 0 && step > 0 {
-            let checkpoint_name = format!("{}checkpoint_step_{}.safetensors", base_dir, step);
-            println!("[Saving checkpoint: {}...]", checkpoint_name);
-            varmap.save(&checkpoint_name)?;
-            let state = serde_json::json!({ "step": step });
-            if let Ok(file) = File::create(&state_path) {
-                serde_json::to_writer(file, &state)?;
-            }
+            let filename_no_ext = format!("{}checkpoint_step_{}", base_dir, step);
+            let safetensors_path = format!("{}.safetensors", filename_no_ext);
+
+            println!("[Saving checkpoint: {}...]", safetensors_path);
+            varmap.save(&safetensors_path)?;
+
+            // Helper updates both specific JSON and generic training_state.json
+            save_training_state(
+                &base_dir,
+                &format!("checkpoint_step_{}", step),
+                step,
+                loss_val_check,
+            )?;
 
             // Rolling: keep only last 3 checkpoints
-            checkpoint_history.push(checkpoint_name);
+            checkpoint_history.push(safetensors_path);
             if checkpoint_history.len() > 3 {
                 let old = checkpoint_history.remove(0);
                 if Path::new(&old).exists() {
-                    println!("♻️ Deleting old checkpoint: {}", old);
                     let _ = std::fs::remove_file(&old);
+                    // Also remove corresponding json
+                    let old_json = old.replace(".safetensors", ".json");
+                    if Path::new(&old_json).exists() {
+                        let _ = std::fs::remove_file(&old_json);
+                    }
                 }
             }
         }

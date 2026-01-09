@@ -1,3 +1,8 @@
+//! Cortex Rust Engine
+//!
+//! Core implementation of the Bit-Llama model with TTT (Test-Time Training) support.
+//! Provides both native Rust bindings and optional Python bindings via PyO3.
+
 #![allow(non_local_definitions)]
 
 pub mod core_engine;
