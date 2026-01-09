@@ -42,10 +42,10 @@ flowchart LR
 
 ## プロジェクト構成
 
-- **[`rust_engine/`](rust_engine/)**: コア実装 (`cortex_rust`)。
+- **[`crates/rust_engine/`](crates/rust_engine/)**: コア実装 (`cortex_rust`)。
     - `core_engine.rs`: Candleベースのニューラルネットロジック。
     - `lib.rs`: 公開 API 定義。
-- **[`bit_llama/`](bit_llama/)**: 学習・推論用のスタンドアロンRustバイナリ。
+- **[`crates/bit_llama/`](crates/bit_llama/)**: 学習・推論用のスタンドアロンRustバイナリ。
 
 ## クイックスタート (Pure Rust CLI) 🚀
 
@@ -53,7 +53,11 @@ Pythonを一切使わずに、学習から推論までを実行できます！
 
 ### 1. ビルド
 ```bash
-cd bit_llama
+# 便利な起動スクリプトを使用 (推奨)
+./launch_trainer.bat
+
+# 手動ビルド
+cd crates/bit_llama
 cargo build --release --features cuda
 ```
 
@@ -72,8 +76,8 @@ cargo run --release --features cuda --bin train_llama -- --lr 0.001 --steps 1000
 ### 3. 推論 (bit_llama)
 高性能なストリーミング生成を実行します。
 ```bash
-# config.json, tokenizer.json, model.safetensors があるディレクトリを指定
-../target/release/bit_llama --model ../models/dummy --prompt "Hello Rust AI" --temp 0.8 --max-tokens 100
+# config.json, tokenizer.json, model.safetensors があるディレクトリを指定 (相対パスに注意)
+../../target/release/bit_llama --model ../../models/dummy --prompt "Hello Rust AI" --temp 0.8 --max-tokens 100
 ```
 *パフォーマンス: ~1100 tokens/sec (CPU, ダミーモデル)*
 
@@ -83,7 +87,8 @@ cargo run --release --features cuda --bin train_llama -- --lr 0.001 --steps 1000
 `maturin` を使用して Python wheel をビルドします。
 
 ```bash
-cd rust_engine
+```bash
+cd crates/rust_engine
 maturin develop --release
 ```
 

@@ -42,10 +42,10 @@ flowchart LR
 
 ## Project Components
 
-- **[`rust_engine/`](rust_engine/)**: The core implementation (`cortex_rust`).
+- **[`crates/rust_engine/`](crates/rust_engine/)**: The core implementation (`cortex_rust`).
     - `core_engine.rs`: Candle-based neural network logic.
     - `lib.rs`: Public API exports.
-- **[`bit_llama/`](bit_llama/)**: Standalone Rust binary for training/inference.
+- **[`crates/bit_llama/`](crates/bit_llama/)**: Standalone Rust binary for training/inference.
 
 ## Quick Start (Pure Rust CLI) 🚀
 
@@ -53,7 +53,11 @@ You can now train and run inference entirely without Python!
 
 ### 1. Build
 ```bash
-cd bit_llama
+# Using provided launch script (Recommended)
+./launch_trainer.bat
+
+# Manual Build
+cd crates/bit_llama
 cargo build --release --features cuda
 ```
 
@@ -73,7 +77,8 @@ cargo run --release --features cuda --bin train_llama -- --lr 0.001 --steps 1000
 High-performance streaming generation.
 ```bash
 # Run with a model directory containing config.json, tokenizer.json, model.safetensors
-../target/release/bit_llama --model ../models/dummy --prompt "Hello Rust AI" --temp 0.8 --max-tokens 100
+# Ensure you are in crates/bit_llama or use absolute paths for model
+../../target/release/bit_llama --model ../../models/dummy --prompt "Hello Rust AI" --temp 0.8 --max-tokens 100
 ```
 *Performance: ~1100 tokens/sec (on CPU with dummy model)*
 
@@ -83,7 +88,8 @@ High-performance streaming generation.
 Use `maturin` to build the Python wheel.
 
 ```bash
-cd rust_engine
+```bash
+cd crates/rust_engine
 maturin develop --release
 ```
 

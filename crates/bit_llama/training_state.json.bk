@@ -1,0 +1,6 @@
+{
+  "step": 9900,
+  "loss": 3.4203825,
+  "date": "2026-01-09T14:41:07.559076300+09:00",
+  "checkpoint": "model_best.safetensors"
+}

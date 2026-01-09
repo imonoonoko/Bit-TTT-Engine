@@ -1,8 +1,8 @@
 [workspace]
 
 members = [
-    "rust_engine",
-    "bit_llama",
+    "crates/rust_engine",
+    "crates/bit_llama",
 ]
 
 resolver = "2"

@@ -32,10 +32,12 @@ graph TD
 
 ### Component Details
 
+### Component Details
+
 | Module | Role | Tech Stack |
 |---|---|---|
-| **core_engine** | Neural Network Logic | **Candle** tensor framework. Supports CPU/CUDA. |
-| **cortex_rust** | Python Interface | **PyO3**. Exposes `BitLlama` class directly to Python. |
+| **crates/core_engine** | Neural Network Logic | **Candle** tensor framework. Supports CPU/CUDA. |
+| **crates/cortex_rust** | Python Interface | **PyO3**. Exposes `BitLlama` class directly to Python. |
 | **legacy** | Deprecated Interop | Old `extern "C"` / `ndarray` implementation (isolated). |
 
 ---

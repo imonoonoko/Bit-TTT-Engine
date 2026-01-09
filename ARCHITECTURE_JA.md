@@ -32,10 +32,12 @@ graph TD
 
 ### コンポーネント詳細
 
+### コンポーネント詳細
+
 | Module | Role | Tech Stack |
 |---|---|---|
-| **core_engine** | 推論・学習ロジック | **Candle** フレームワーク。CPU/CUDA両対応。 |
-| **cortex_rust** | Python インターフェース | **PyO3**。`BitLlama` クラスをPythonに直接公開。 |
+| **crates/core_engine** | 推論・学習ロジック | **Candle** フレームワーク。CPU/CUDA両対応。 |
+| **crates/cortex_rust** | Python インターフェース | **PyO3**。`BitLlama` クラスをPythonに直接公開。 |
 | **legacy** | 旧実装（非推奨） | 古い `extern "C"` / `ndarray` 実装（互換性のため隔離）。 |
 
 ---
