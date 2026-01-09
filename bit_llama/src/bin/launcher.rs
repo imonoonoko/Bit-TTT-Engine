@@ -19,8 +19,45 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "Bit-TTT Trainer Launcher",
         options,
-        Box::new(|_cc| Box::new(MyApp::default())),
+        Box::new(|cc| {
+            setup_custom_fonts(&cc.egui_ctx);
+            Box::new(MyApp::default())
+        }),
     )
+}
+
+fn setup_custom_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+
+    // Try multiple fonts in order of preference (smaller = faster loading)
+    let font_paths = [
+        "C:/Windows/Fonts/YuGothB.ttc",  // Yu Gothic Bold (~2MB, faster)
+        "C:/Windows/Fonts/msgothic.ttc", // MS Gothic (~4MB)
+        "C:/Windows/Fonts/meiryo.ttc",   // Meiryo (~7MB, slower)
+    ];
+
+    for font_path in font_paths {
+        if let Ok(data) = std::fs::read(font_path) {
+            fonts
+                .font_data
+                .insert("jp_font".to_owned(), egui::FontData::from_owned(data));
+
+            fonts
+                .families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .insert(0, "jp_font".to_owned());
+
+            fonts
+                .families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .insert(0, "jp_font".to_owned());
+
+            ctx.set_fonts(fonts);
+            return;
+        }
+    }
 }
 
 struct TrainingStatus {
@@ -29,16 +66,7 @@ struct TrainingStatus {
     loss: f32,
     lr: f64,
     message: String,
-}
-
-#[derive(serde::Deserialize)]
-struct TrainingState {
-    step: usize,
-    loss: f32,
-    #[allow(dead_code)]
-    date: String,
-    #[allow(dead_code)]
-    checkpoint: String,
+    is_compiling: bool, // New: shows if cargo is compiling
 }
 
 impl Default for TrainingStatus {
@@ -49,11 +77,19 @@ impl Default for TrainingStatus {
             loss: 0.0,
             lr: 0.0,
             message: "Ready to start".to_string(),
+            is_compiling: false,
         }
     }
 }
 
+#[derive(PartialEq, Clone, Copy)]
+enum Language {
+    English,
+    Japanese,
+}
+
 struct MyApp {
+    // Settings
     lr: f64,
     min_lr: f64,
     warmup_steps: usize,
@@ -61,275 +97,45 @@ struct MyApp {
     save_interval: usize,
     checkpoint_path: Option<String>,
     data_path: String,
+
+    // UI State
     logs: Arc<Mutex<String>>,
-    status: Arc<Mutex<TrainingStatus>>, // 新機能: 進捗状態管理
-    show_logs: bool,                    // 新機能: ログ表示切り替え
+    status: Arc<Mutex<TrainingStatus>>,
+
     process: Option<Child>,
     is_running: Arc<Mutex<bool>>,
+    language: Language, // New: Language Selection
 }
 
 impl Default for MyApp {
     fn default() -> Self {
         Self {
-            lr: 0.00005,
-            min_lr: 0.00001,   // 最小LR
-            warmup_steps: 500, // ウォームアップ
-            steps: 10000,
-            save_interval: 1000,
+            lr: 0.001,          // Default from train_llama.rs
+            min_lr: 0.0001,     // Default from train_llama.rs
+            warmup_steps: 100,  // Default from train_llama.rs
+            steps: 10000,       // Default
+            save_interval: 500, // Default from train_llama.rs
             checkpoint_path: None,
             data_path: "data/TinyStories/train.bin".to_string(),
             logs: Arc::new(Mutex::new(String::new())),
             status: Arc::new(Mutex::new(TrainingStatus::default())),
-            show_logs: false, // デフォルトはログ非表示
+
             process: None,
             is_running: Arc::new(Mutex::new(false)),
+            language: Language::Japanese, // Default to Japanese as requested
         }
-    }
-}
-
-impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // 1. Mutexのロック処理とトリミングを CentralPanel の前に出す
-        // これにより、eguiのパネル内での self 借用とロックが競合するのを防ぐ
-        let logs_to_display = {
-            let mut logs_guard = self.logs.lock().unwrap();
-            let len = logs_guard.len();
-
-            // 定期的なトリミング (メモリ節約)
-            if len > 100000 {
-                let tail = logs_guard.split_off(len - 80000);
-                *logs_guard = tail;
-            }
-
-            // GUI表示用には末尾のみをコピーする (GUIフリーズ防止)
-            // 毎回数万文字をcloneすると重いため、直近5000文字程度に制限
-            let display_limit = 5000;
-            if logs_guard.len() > display_limit {
-                logs_guard[logs_guard.len() - display_limit..].to_string()
-            } else {
-                logs_guard.clone()
-            }
-        };
-
-        // 2. プロセスの終了チェック
-        if let Some(ref mut child) = self.process {
-            match child.try_wait() {
-                Ok(Some(_)) => {
-                    self.process = None;
-                    *self.is_running.lock().unwrap() = false;
-                    let mut logs = self.logs.lock().unwrap();
-                    logs.push_str("\n✅ Training process finished.\n");
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    let mut logs = self.logs.lock().unwrap();
-                    logs.push_str(&format!("\n❌ Error: {}\n", e));
-                }
-            }
-        }
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("🚀 Bit-TTT Training Control");
-            ui.separator();
-
-            // 1. チェックポイント選択
-            ui.horizontal(|ui| {
-                ui.label("Checkpoint:");
-                if let Some(path) = &self.checkpoint_path {
-                    ui.monospace(path);
-                } else {
-                    ui.label("(Start Fresh)");
-                }
-                if ui.button("📂 Load...").clicked() {
-                    let dialog = rfd::FileDialog::new().add_filter("SafeTensors", &["safetensors"]);
-
-                    // Set default path to bit_llama directory if it exists
-                    let dialog = if let Ok(cwd) = std::env::current_dir() {
-                        let bit_llama_dir = cwd.join("bit_llama");
-                        if bit_llama_dir.exists() {
-                            dialog.set_directory(&bit_llama_dir)
-                        } else {
-                            dialog
-                        }
-                    } else {
-                        dialog
-                    };
-
-                    if let Some(path_buf) = dialog.pick_file() {
-                        let path_str = path_buf.display().to_string();
-                        self.checkpoint_path = Some(path_str.clone());
-
-                        // Try to read associated JSON metadata
-                        // If path is "model.safetensors", look for "model.json"
-                        let json_path = path_buf.with_extension("json");
-                        if json_path.exists() {
-                            if let Ok(file) = std::fs::File::open(&json_path) {
-                                let reader = std::io::BufReader::new(file);
-                                let state_result: serde_json::Result<TrainingState> =
-                                    serde_json::from_reader(reader);
-                                if let Ok(state) = state_result {
-                                    let mut status = self.status.lock().unwrap();
-                                    status.step = state.step;
-                                    status.loss = state.loss;
-                                    status.message = format!(
-                                        "Set to resume from Step {} (loaded from JSON)",
-                                        state.step
-                                    );
-
-                                    // Also update step input in GUI
-                                    if state.step < self.steps {
-                                        // Keep total steps as is unless it's smaller than current
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if ui.button("🗑 Clear").clicked() {
-                    self.checkpoint_path = None;
-                    // Reset status to 0
-                    let mut status = self.status.lock().unwrap();
-                    status.step = 0;
-                    status.loss = 0.0;
-                    status.message = "Ready to start".to_string();
-                }
-            });
-
-            ui.separator();
-
-            // 2. hyperparameters
-            ui.heading("⚙️ Training Settings");
-
-            ui.horizontal(|ui| {
-                ui.label("Learning Rate:");
-                ui.add(egui::Slider::new(&mut self.lr, 0.00001..=0.01).logarithmic(true));
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Min LR (End):");
-                ui.add(egui::Slider::new(&mut self.min_lr, 0.000001..=0.001).logarithmic(true));
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Warmup Steps:");
-                ui.add(egui::DragValue::new(&mut self.warmup_steps).speed(10));
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Total Steps:");
-                ui.add(egui::DragValue::new(&mut self.steps).speed(100));
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Save Interval:");
-                ui.add(egui::DragValue::new(&mut self.save_interval).speed(100));
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Data Path:");
-                ui.text_edit_singleline(&mut self.data_path);
-            });
-
-            ui.separator();
-
-            // 3. Start/Stop buttons
-            ui.horizontal(|ui| {
-                let is_running = self.process.is_some();
-
-                if !is_running {
-                    if ui.button("▶ START Training").clicked() {
-                        self.start_training();
-                    }
-                } else {
-                    // Show stop button with spinner
-                    if ui.button("⏹ STOP & SAVE").clicked() {
-                        self.stop_training();
-                    }
-                    ui.spinner();
-                    ui.label("Training in progress...");
-                }
-
-                if ui.button("🗑 Clear Logs").clicked() {
-                    self.logs.lock().unwrap().clear();
-                }
-            });
-
-            ui.separator();
-
-            // 4. Progress Dashboard (New!)
-            ui.separator();
-            ui.heading("📊 Progress:");
-
-            let status = self.status.lock().unwrap();
-            let progress = if status.total_steps > 0 {
-                status.step as f32 / status.total_steps as f32
-            } else {
-                0.0
-            };
-
-            // A. Metrics Grid
-            egui::Grid::new("metrics_grid")
-                .striped(true)
-                .show(ui, |ui| {
-                    ui.label("Current Step:");
-                    ui.label(format!("{} / {}", status.step, status.total_steps));
-                    ui.end_row();
-
-                    ui.label("Loss:");
-                    ui.label(
-                        egui::RichText::new(format!("{:.4}", status.loss))
-                            .strong()
-                            .color(egui::Color32::LIGHT_RED),
-                    );
-                    ui.end_row();
-
-                    ui.label("Learning Rate:");
-                    ui.label(format!("{:.7}", status.lr));
-                    ui.end_row();
-                });
-
-            ui.add_space(5.0);
-
-            // B. Progress Bar
-            ui.add(
-                egui::ProgressBar::new(progress)
-                    .show_percentage()
-                    .animate(true),
-            );
-            ui.label(egui::RichText::new(&status.message).italics().weak()); // show last log line
-
-            ui.separator();
-
-            // 5. Log display (Optional)
-            if ui
-                .checkbox(
-                    &mut self.show_logs,
-                    "Show Full Logs (May affect performance)",
-                )
-                .changed()
-            {
-                // Toggle logic if needed
-            }
-
-            if self.show_logs {
-                ui.heading("📋 Logs:");
-                egui::ScrollArea::vertical()
-                    .max_height(200.0)
-                    .stick_to_bottom(true)
-                    .show(ui, |ui| {
-                        ui.code(logs_to_display.as_str());
-                    });
-            }
-
-            // Request repaint while running to update logs
-            if self.process.is_some() {
-                ctx.request_repaint();
-            }
-        });
     }
 }
 
 impl MyApp {
+    /// Helper for localization
+    fn text(&self, en: &str, ja: &str) -> String {
+        match self.language {
+            Language::English => en.to_string(),
+            Language::Japanese => ja.to_string(),
+        }
+    }
+
     fn start_training(&mut self) {
         // Clear old logs
         self.logs.lock().unwrap().clear();
@@ -339,8 +145,8 @@ impl MyApp {
             let mut status = self.status.lock().unwrap();
             status.step = 0;
             status.loss = 0.0;
-            status.message = "Starting...".to_string();
-            // ※Checkpointロード時は、ログから "Resuming..." が来るので自動で更新されます
+            status.is_compiling = true; // Show compiling indicator immediately
+            status.message = self.text("Starting... (Compiling)", "起動中... (コンパイル中)");
         }
 
         // 🛡️ Safety: Ensure no leftover stop signal exists
@@ -374,7 +180,7 @@ impl MyApp {
             &self.data_path,
         ];
 
-        // 🚨 Fix: Pass checkpoint path to the trainer
+        // 🚨 Pass checkpoint path to the trainer
         if let Some(path) = &self.checkpoint_path {
             args.push("--load");
             args.push(path);
@@ -383,8 +189,12 @@ impl MyApp {
         {
             let mut logs = self.logs.lock().unwrap();
             logs.push_str(&format!(
-                "🚀 Starting training...\n   LR: {}\n   Steps: {}\n   Save Interval: {}\n   Data: {}\n\n",
-                self.lr, self.steps, self.save_interval, self.data_path
+                "🚀 {}...\n   LR: {}\n   Steps: {}\n   Save Interval: {}\n   Data: {}\n\n",
+                self.text("Starting Training", "トレーニングを開始します"),
+                self.lr,
+                self.steps,
+                self.save_interval,
+                self.data_path
             ));
         }
 
@@ -406,14 +216,11 @@ impl MyApp {
                         let reader = BufReader::new(stdout);
                         for line in reader.lines() {
                             if let Ok(l) = line {
-                                // 1. ログ保存
                                 {
                                     let mut logs = logs_clone.lock().unwrap();
                                     logs.push_str(&l);
                                     logs.push('\n');
                                 }
-
-                                // 2. ステータス解析 (Extracted function)
                                 let mut status = status_clone.lock().unwrap();
                                 parse_log_line(&l, &mut status);
                             }
@@ -421,17 +228,29 @@ impl MyApp {
                     });
                 }
 
-                // Read stderr in background thread
+                // Read stderr in background thread (cargo outputs build info here)
                 if let Some(stderr) = child.stderr.take() {
                     let logs_clone = self.logs.clone();
+                    let status_clone = self.status.clone();
                     thread::spawn(move || {
                         let reader = BufReader::new(stderr);
                         for line in reader.lines() {
                             if let Ok(l) = line {
-                                let mut logs = logs_clone.lock().unwrap();
-                                logs.push_str("[ERR] ");
-                                logs.push_str(&l);
-                                logs.push('\n');
+                                {
+                                    let mut logs = logs_clone.lock().unwrap();
+                                    logs.push_str("[BUILD] ");
+                                    logs.push_str(&l);
+                                    logs.push('\n');
+                                }
+
+                                // Detect compilation phase
+                                let mut status = status_clone.lock().unwrap();
+                                if l.contains("Compiling") || l.contains("Building") {
+                                    status.is_compiling = true;
+                                    status.message = l.clone();
+                                } else if l.contains("Finished") || l.contains("Running") {
+                                    status.is_compiling = false;
+                                }
                             }
                         }
                     });
@@ -441,43 +260,308 @@ impl MyApp {
             }
             Err(e) => {
                 let mut logs = self.logs.lock().unwrap();
-                logs.push_str(&format!("❌ Failed to start: {}\n", e));
+                logs.push_str(&format!(
+                    "❌ {}: {}\n",
+                    self.text("Failed to start", "起動失敗"),
+                    e
+                ));
             }
         }
     }
 
     fn stop_training(&mut self) {
-        // "stop_signal" という空のファイルを作成する
-        // これが「止まれ」の合図になります
         if let Ok(path) = std::env::current_dir() {
             let signal_path = path.join("stop_signal");
             match std::fs::File::create(&signal_path) {
                 Ok(_) => {
                     let mut logs = self.logs.lock().unwrap();
                     logs.push_str(&format!(
-                        "\n🛑 Stop signal sent to: {:?}\nWaiting for trainer to save and exit...\n",
-                        signal_path
+                        "\n🛑 {}\n",
+                        self.text(
+                            "Stop signal sent. Waiting for save...",
+                            "停止シグナルを送信しました。保存待機中..."
+                        )
                     ));
                 }
                 Err(e) => {
                     let mut logs = self.logs.lock().unwrap();
-                    logs.push_str(&format!(
-                        "\n❌ Failed to create stop signal at {:?}: {}\n",
-                        signal_path, e
-                    ));
+                    logs.push_str(&format!("\n❌ Error creating stop signal: {}\n", e));
                 }
             }
         }
     }
 }
 
+impl eframe::App for MyApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // --- 1. Log Management (Lock & Trim) ---
+        let logs_to_display = {
+            let mut logs_guard = self.logs.lock().unwrap();
+            let len = logs_guard.len();
+            if len > 100000 {
+                let tail = logs_guard.split_off(len - 80000);
+                *logs_guard = tail;
+            }
+            let display_limit = 5000;
+            if logs_guard.len() > display_limit {
+                logs_guard[logs_guard.len() - display_limit..].to_string()
+            } else {
+                logs_guard.clone()
+            }
+        };
+
+        // --- 2. Process Monitoring ---
+        if let Some(ref mut child) = self.process {
+            match child.try_wait() {
+                Ok(Some(_)) => {
+                    self.process = None;
+                    *self.is_running.lock().unwrap() = false;
+                    let mut logs = self.logs.lock().unwrap();
+                    logs.push_str(&format!(
+                        "\n✅ {}\n",
+                        self.text("Training finished", "トレーニング完了")
+                    ));
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    let mut logs = self.logs.lock().unwrap();
+                    logs.push_str(&format!("\n❌ Error: {}\n", e));
+                }
+            }
+        }
+
+        // --- 3. UI Render ---
+        egui::CentralPanel::default().show(ctx, |ui| {
+            // Header
+            ui.horizontal(|ui| {
+                ui.heading("🚀 Bit-TTT Trainer");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.selectable_value(&mut self.language, Language::English, "🇺🇸 English");
+                    ui.selectable_value(&mut self.language, Language::Japanese, "🇯🇵 日本語");
+                });
+            });
+            ui.separator();
+
+            // Dashboard
+            // IMPORTANT: Copy values and drop lock BEFORE any button handlers
+            // to avoid deadlock when start_training tries to acquire the same lock
+            let (step, total_steps, loss, lr, is_compiling, message) = {
+                let status = self.status.lock().unwrap();
+                (
+                    status.step,
+                    status.total_steps,
+                    status.loss,
+                    status.lr,
+                    status.is_compiling,
+                    status.message.clone(),
+                )
+            }; // Lock is dropped here
+
+            let progress = if total_steps > 0 {
+                step as f32 / total_steps as f32
+            } else {
+                0.0
+            };
+
+            ui.heading(format!("📊 {}", self.text("Progress", "進捗状況")));
+
+            // Show compilation indicator if building
+            if is_compiling {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(
+                        egui::RichText::new(self.text(
+                            "⏳ Compiling (this may take a few minutes)...",
+                            "⏳ コンパイル中（数分かかることがあります）...",
+                        ))
+                        .strong()
+                        .color(egui::Color32::YELLOW),
+                    );
+                });
+            }
+
+            ui.add(
+                egui::ProgressBar::new(progress)
+                    .show_percentage()
+                    .animate(true),
+            );
+
+            egui::Grid::new("metrics").striped(true).show(ui, |ui| {
+                ui.label(self.text("Step:", "ステップ:"));
+                ui.label(format!("{} / {}", step, total_steps));
+                ui.label(self.text("Loss:", "損失 (Loss):"));
+                ui.label(
+                    egui::RichText::new(format!("{:.4}", loss))
+                        .strong()
+                        .color(egui::Color32::LIGHT_RED),
+                );
+                ui.label(self.text("LR:", "学習率:"));
+                ui.label(format!("{:.7}", lr));
+                ui.end_row();
+            });
+            ui.label(egui::RichText::new(&message).italics().weak());
+            ui.separator();
+
+            // Settings Section using CollapsingHeader or grouping
+            // Disable settings while running
+            ui.add_enabled_ui(self.process.is_none(), |ui| {
+                ui.heading(format!("⚙️ {}", self.text("Configuration", "設定")));
+
+                egui::Grid::new("settings_grid")
+                    .striped(true)
+                    .spacing([20.0, 8.0])
+                    .show(ui, |ui| {
+                        // Checkpoint
+                        ui.label(format!(
+                            "📂 {}",
+                            self.text("Checkpoint:", "チェックポイント:")
+                        ));
+                        ui.horizontal(|ui| {
+                            if let Some(path) = &self.checkpoint_path {
+                                ui.monospace(path);
+                                if ui
+                                    .button("🗑")
+                                    .on_hover_text(self.text("Clear", "クリア"))
+                                    .clicked()
+                                {
+                                    self.checkpoint_path = None;
+                                }
+                            } else {
+                                ui.label(
+                                    egui::RichText::new(self.text("(New Run)", "(新規学習)"))
+                                        .weak(),
+                                );
+                            }
+                            if ui.button(self.text("Load...", "参照...")).clicked() {
+                                // Use catch_unwind to safely handle any panics in rfd
+                                let result = std::panic::catch_unwind(|| {
+                                    let dialog = rfd::FileDialog::new()
+                                        .add_filter("SafeTensors", &["safetensors"]);
+                                    let dialog = if let Ok(cwd) = std::env::current_dir() {
+                                        dialog.set_directory(&cwd)
+                                    } else {
+                                        dialog
+                                    };
+                                    dialog.pick_file()
+                                });
+
+                                if let Ok(Some(path_buf)) = result {
+                                    self.checkpoint_path = Some(path_buf.display().to_string());
+                                }
+                            }
+                        });
+                        ui.end_row();
+
+                        // Data
+                        ui.label(format!("💾 {}", self.text("Data Path:", "データパス:")));
+                        ui.text_edit_singleline(&mut self.data_path);
+                        ui.end_row();
+
+                        // LR
+                        ui.label(format!(
+                            "📉 {}",
+                            self.text("Learning Rate:", "学習率 (LR):")
+                        ));
+                        ui.add(egui::Slider::new(&mut self.lr, 0.00001..=0.01).logarithmic(true));
+                        ui.end_row();
+
+                        // Min LR
+                        ui.label(format!("End LR (Cosine):"));
+                        ui.add(
+                            egui::Slider::new(&mut self.min_lr, 0.000001..=0.001).logarithmic(true),
+                        );
+                        ui.end_row();
+
+                        // Steps
+                        ui.label(format!("🔄 {}", self.text("Total Steps:", "総ステップ数:")));
+                        ui.add(egui::DragValue::new(&mut self.steps).speed(100));
+                        ui.end_row();
+
+                        // Warmup
+                        ui.label(format!(
+                            "🔥 {}",
+                            self.text("Warmup Steps:", "ウォームアップ:")
+                        ));
+                        ui.add(egui::DragValue::new(&mut self.warmup_steps).speed(10));
+                        ui.end_row();
+
+                        // Save Interval
+                        ui.label(format!("💾 {}", self.text("Save Interval:", "保存間隔:")));
+                        ui.add(egui::DragValue::new(&mut self.save_interval).speed(100));
+                        ui.end_row();
+                    });
+            });
+
+            ui.separator();
+
+            // Actions
+            ui.horizontal(|ui| {
+                if self.process.is_none() {
+                    if ui
+                        .button(
+                            egui::RichText::new(format!(
+                                "▶ {}",
+                                self.text("START Training", "学習開始")
+                            ))
+                            .heading()
+                            .color(egui::Color32::WHITE)
+                            .background_color(egui::Color32::DARK_GREEN),
+                        )
+                        .clicked()
+                    {
+                        self.start_training();
+                    }
+                } else {
+                    if ui
+                        .button(
+                            egui::RichText::new(format!(
+                                "⏹ {}",
+                                self.text("STOP & SAVE", "保存して停止")
+                            ))
+                            .heading()
+                            .color(egui::Color32::WHITE)
+                            .background_color(egui::Color32::DARK_RED),
+                        )
+                        .clicked()
+                    {
+                        self.stop_training();
+                    }
+                    ui.spinner();
+                }
+
+                if ui
+                    .button(format!("🗑 {}", self.text("Clear Log", "ログ消去")))
+                    .clicked()
+                {
+                    self.logs.lock().unwrap().clear();
+                }
+            });
+
+            ui.separator();
+
+            // Logs
+            ui.collapsing(format!("📋 {}", self.text("Logs", "ログ")), |ui| {
+                egui::ScrollArea::vertical()
+                    .max_height(200.0)
+                    .stick_to_bottom(true)
+                    .show(ui, |ui| {
+                        ui.code(logs_to_display.as_str());
+                    });
+            });
+
+            // Request repaint while running or compiling
+            if self.process.is_some() || is_compiling {
+                ctx.request_repaint();
+            }
+        });
+    }
+}
+
 // アプリ終了時（ウィンドウを閉じた時）のクリーンアップ処理
 impl Drop for MyApp {
     fn drop(&mut self) {
-        // プロセスがまだ動いていれば強制終了させる
         if let Some(mut child) = self.process.take() {
-            let _ = child.kill(); // 念の為 kill しておく
-                                  // ※ Windowsなら kill でOK。stop_signal を待つ余裕がないため強制終了が安全。
+            let _ = child.kill();
         }
     }
 }
