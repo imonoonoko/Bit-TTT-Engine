@@ -75,7 +75,12 @@ cargo run --release --features cuda --bin train_llama -- --lr 0.001 --steps 1000
 
 ### 3. Inference (bit_llama)
 High-performance streaming generation.
+
 ```bash
+# Using provided launch script (Recommended)
+./launch_chat.bat
+
+# Manual Run
 # Run with a model directory containing config.json, tokenizer.json, model.safetensors
 # Ensure you are in crates/bit_llama or use absolute paths for model
 ../../target/release/bit_llama --model ../../models/dummy --prompt "Hello Rust AI" --temp 0.8 --max-tokens 100

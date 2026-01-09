@@ -75,7 +75,12 @@ cargo run --release --features cuda --bin train_llama -- --lr 0.001 --steps 1000
 
 ### 3. 推論 (bit_llama)
 高性能なストリーミング生成を実行します。
+
 ```bash
+# 便利な起動スクリプトを使用 (推奨)
+./launch_chat.bat
+
+# 手動実行
 # config.json, tokenizer.json, model.safetensors があるディレクトリを指定 (相対パスに注意)
 ../../target/release/bit_llama --model ../../models/dummy --prompt "Hello Rust AI" --temp 0.8 --max-tokens 100
 ```
