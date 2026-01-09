@@ -438,6 +438,7 @@ pub struct BitLlamaConfig {
     #[pyo3(get, set)]
     pub hidden_dim: usize,
     #[pyo3(get, set)]
+    #[serde(alias = "n_layers")]
     pub num_layers: usize,
     #[pyo3(get, set)]
     pub inner_lr: f64,
@@ -463,6 +464,7 @@ impl BitLlamaConfig {
 pub struct BitLlamaConfig {
     pub vocab_size: usize,
     pub hidden_dim: usize,
+    #[serde(alias = "n_layers")]
     pub num_layers: usize,
     pub inner_lr: f64,
 }

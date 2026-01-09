@@ -4,19 +4,19 @@
 /.vscode/
 **/*.DS_Store
 *.log
+stop_signal
 
 # Checkpoints and Models
 *.safetensors
 *.bin
+
+# Ignore all JSONs by default (configs/states/checkpoints)
 *.json
 
-# Allow specific config files
-!config.json
-!tokenizer.json
-!models/
-models/*
-# Allow data folder in crate
-!crates/bit_llama/data/
+# BUT allow specific source/template JSONs
+!models/**/*.json
+!crates/bit_llama/data/**/*.json
+!crates/bit_llama/models/**/*.json
 
 # User specific
 .env
@@ -24,6 +24,7 @@ models/*
 # Scripts
 __pycache__/
 *.pyc
+.ipynb_checkpoints/
 
 # IDEs
 .gemini/

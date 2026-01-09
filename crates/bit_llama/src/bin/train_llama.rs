@@ -332,10 +332,9 @@ fn main() -> Result<()> {
         let config_path = format!("{}config.json", base_dir);
         // Always overwrite to ensure it matches current run, or check if different?
         // Best practice: overwrite or ensure consistency. Let's just write it.
-        let config_json = serde_json::json!({
             "dim": DIM,
             "hidden_dim": DIM,
-            "n_layers": LAYERS,
+            "num_layers": LAYERS,
             "n_heads": 8,
             "vocab_size": VOCAB,
             "norm_eps": 1e-5,
