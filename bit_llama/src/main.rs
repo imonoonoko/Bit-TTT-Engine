@@ -1,63 +1,68 @@
-//! Bit-Llama Streaming Inference CLI
+//! Bit-TTT All-in-One Binary (`bit-ttt`)
 //!
-//! Command-line tool for interactive text generation using the Bit-Llama model.
-//! Usage: cargo run --bin bit_llama -- --model <path> --prompt "Hello"
+//! Handlers:
+//! - No args: Launch GUI
+//! - `run`: Launch CLI Chat
+//! - `list`: List Models
 
-use anyhow::Result;
-use clap::Parser;
-use cortex_rust::Llama;
-use std::io::Write;
+mod chat;
+mod cli_mode;
+mod gui_mode;
 
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Path to the model directory (containing config.json, tokenizer.json, model.safetensors)
-    #[arg(short, long)]
-    model: String,
+use clap::{Parser, Subcommand};
 
-    /// Prompt to generate text from
-    #[arg(short, long)]
-    prompt: String,
-
-    /// Maximum tokens to generate
-    #[arg(short = 'n', long, default_value_t = 100)]
-    max_tokens: usize,
-
-    /// Temperature
-    #[arg(short, long, default_value_t = 0.7)]
-    temp: f64,
+#[derive(Parser)]
+#[command(name = "bit-ttt", about = "Bit-TTT Ecosystem All-in-One Tool")]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
 }
 
-fn main() -> Result<()> {
-    let args = Args::parse();
+#[derive(Subcommand)]
+enum Commands {
+    /// Load a model and start chatting (CLI Mode)
+    Run {
+        /// Path to .bitt file or model directory
+        #[arg(required = true)]
+        model_path: String,
 
-    println!("Loading model from: {}", args.model);
-    let mut model = Llama::new(&args.model)?;
+        /// Sampling Temperature
+        #[arg(short, long, default_value_t = 0.8)]
+        temperature: f64,
 
-    println!("Generating (Stream)...");
-    print!("{}", args.prompt); // Print prompt first
-    std::io::stdout().flush()?;
+        /// Max Generation Tokens
+        #[arg(long, default_value_t = 200)]
+        max_tokens: usize,
 
-    let start_time = std::time::Instant::now();
-    let mut token_count = 0;
+        /// System Prompt
+        #[arg(long, default_value = "You are a helpful AI assistant.")]
+        system: String,
+    },
+    /// List available models
+    List,
+}
 
-    let _full_text =
-        model.stream_completion(&args.prompt, args.max_tokens, args.temp, |token| {
-            print!("{}", token);
-            std::io::stdout().flush()?;
-            token_count += 1;
-            Ok(true) // Continue
-        })?;
+fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
 
-    let duration = start_time.elapsed();
-    let tps = token_count as f64 / duration.as_secs_f64();
+    match cli.command {
+        Some(Commands::Run {
+            model_path,
+            temperature,
+            max_tokens,
+            system,
+        }) => {
+            cli_mode::run_chat(&model_path, temperature, max_tokens, &system)?;
+        }
+        Some(Commands::List) => {
+            cli_mode::list_models()?;
+        }
+        None => {
+            // Default to GUI Mode
+            println!("🖥️ Launching GUI Mode...");
+            gui_mode::run().map_err(|e| anyhow::anyhow!("GUI Error: {}", e))?;
+        }
+    }
 
-    println!("\n\n--- Done ---");
-    println!(
-        "Stats: Generated {} tokens in {:.2}s ({:.2} tok/s)",
-        token_count,
-        duration.as_secs_f64(),
-        tps
-    );
     Ok(())
 }

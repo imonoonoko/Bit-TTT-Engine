@@ -547,6 +547,7 @@ name = "bit_llama"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "byteorder",
  "candle-core",
  "candle-nn",
  "chrono",
@@ -1092,9 +1093,11 @@ name = "cortex_rust"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "byteorder",
  "candle-core",
  "candle-nn",
  "libc",
+ "memmap2",
  "ndarray",
  "pyo3",
  "rand 0.8.5",

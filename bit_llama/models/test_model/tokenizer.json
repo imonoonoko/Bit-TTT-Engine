@@ -1,0 +1,12 @@
+{
+    "version": "1.0",
+    "model": {
+        "type": "BPE",
+        "vocab": {
+            "<unk>": 0,
+            "<s>": 1,
+            "</s>": 2
+        },
+        "merges": []
+    }
+}

@@ -285,7 +285,6 @@ fn main() -> Result<()> {
         "Starting Training Loop (Target: {} steps, Save every {} steps)...",
         args.steps, save_interval
     );
-    let total_steps = args.steps;
 
     // 【1】 実行制御用のフラグを作成 (スレッド間で共有するため Arc と AtomicBool を使う)
     let running = Arc::new(AtomicBool::new(true));
@@ -315,8 +314,63 @@ fn main() -> Result<()> {
     if let Ok(cwd) = std::env::current_dir() {
         println!("CWD: {:?}", cwd);
     }
+    // --- Auto-Save Config ---
+    let config_path = format!("{}config.json", base_dir);
+    // Always overwrite to ensure it matches current run, or check if different?
+    // Best practice: overwrite or ensure consistency. Let's just write it.
+    let config_json = serde_json::json!({
+        "dim": DIM,
+        "hidden_dim": DIM,
+        "n_layers": LAYERS,
+        "n_heads": 8,
+        "vocab_size": VOCAB,
+        "norm_eps": 1e-5,
+        "inner_lr": 0.01
+    });
+    if let Ok(f) = std::fs::File::create(&config_path) {
+        let _ = serde_json::to_writer_pretty(f, &config_json);
+        println!("💾 Saved training config to: {}", config_path);
+    }
 
-    for step in start_step..total_steps {
+    // --- Auto-Save Tokenizer ---
+    // Infer tokenizer path from data path (assuming it sits next to train.bin)
+    let data_path_obj = Path::new(&args.data);
+    let tokenizer_source = if let Some(parent) = data_path_obj.parent() {
+        parent.join("tokenizer.json")
+    } else {
+        Path::new("data/TinyStories/tokenizer.json").to_path_buf()
+    };
+
+    let tokenizer_dest = format!("{}tokenizer.json", base_dir);
+    if tokenizer_source.exists() {
+        if let Err(e) = std::fs::copy(&tokenizer_source, &tokenizer_dest) {
+            println!(
+                "⚠️ Failed to copy tokenizer from {:?}: {}",
+                tokenizer_source, e
+            );
+        } else {
+            println!("✅ Tokenizer backed up to: {}", tokenizer_dest);
+        }
+    } else {
+        // Fallback check for default location if inference failed
+        let default_tok = Path::new("data/TinyStories/tokenizer.json");
+        if default_tok.exists() && default_tok != tokenizer_source {
+            if let Ok(_) = std::fs::copy(default_tok, &tokenizer_dest) {
+                println!(
+                    "✅ Tokenizer backed up to: {} (from default path)",
+                    tokenizer_dest
+                );
+            }
+        } else {
+            println!(
+                "⚠️ Warning: Source tokenizer not found at {:?}",
+                tokenizer_source
+            );
+        }
+    }
+
+    // --- Training Loop ---
+    for step in start_step..args.steps {
         // 0. Early Stop Check (Before Data Loading)
         if Path::new("stop_signal").exists() {
             println!("\n🛑 Stop signal detected (Start of Loop)! Saving and exiting...");

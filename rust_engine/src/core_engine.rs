@@ -574,6 +574,116 @@ pub struct Llama {
 }
 
 impl Llama {
+    /// Auto-detects format and loads the model.
+    /// Supports:
+    /// - `.bitt` file (Fast Native Container)
+    /// - Directory (Legacy: needs config.json + tokenizer.json + model.safetensors)
+    /// - `.safetensors` file (Legacy: infers parent directory)
+    pub fn load_auto<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+        let path = path.as_ref();
+
+        if path.is_file() {
+            if let Some(ext) = path.extension() {
+                if ext == "bitt" {
+                    return Self::from_bitt_file(path);
+                } else if ext == "safetensors" {
+                    // Assume parent dir contains config/tokenizer
+                    let parent = path.parent().unwrap_or(Path::new("."));
+                    return Self::new(parent);
+                }
+            }
+        } else if path.is_dir() {
+            return Self::new(path);
+        }
+
+        // Fallback to trying as BITT if file, or error
+        Self::from_bitt_file(path)
+            .or_else(|_| Self::new(path))
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "Failed to load model from {:?}. Not a valid .bitt file or legacy directory.",
+                    path
+                )
+            })
+    }
+
+    /// Bit-TTT Native Container (.bitt) Loader
+
+    /// Fast loading from a single file containing Config, Tokenizer, and Weights.
+    pub fn from_bitt_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+        let path = path.as_ref();
+        let file = std::fs::File::open(path)?;
+
+        // Memmap for fast access
+        let mmap = unsafe { memmap2::Mmap::map(&file)? };
+
+        // 1. Magic Check
+        if mmap.len() < 12 || &mmap[0..4] != b"BITT" {
+            anyhow::bail!("Invalid format: Not a .bitt file (Magic mismatch)");
+        }
+
+        // 2. Read Header Length (u64 LE) at offset 4
+        // We can just read bytes directly
+        let header_len_bytes: [u8; 8] = mmap[4..12].try_into()?;
+        let header_len = u64::from_le_bytes(header_len_bytes) as usize;
+
+        // 3. Parse Header (JSON)
+        let header_start = 12;
+        let header_end = header_start + header_len;
+        if mmap.len() < header_end {
+            anyhow::bail!("Invalid format: File too short for header");
+        }
+
+        let header_slice = &mmap[header_start..header_end];
+        let header_json: serde_json::Value = serde_json::from_slice(header_slice)?;
+
+        // Reconstruct Config
+        let config: BitLlamaConfig = serde_json::from_value(header_json["config"].clone())
+            .map_err(|e| anyhow::anyhow!("Failed to parse config from BITT header: {}", e))?;
+
+        // Reconstruct Tokenizer
+        use std::str::FromStr;
+        let tokenizer_json_str = header_json["tokenizer"].to_string();
+        let tokenizer = Tokenizer::from_str(&tokenizer_json_str)
+            .map_err(|e| anyhow::anyhow!("Failed to parse tokenizer from BITT header: {}", e))?;
+
+        // 4. Load Weights (Safetensors Body)
+        let body_start = header_end;
+        let body_slice = &mmap[body_start..];
+
+        // Setup Device
+        let device = candle_core::Device::cuda_if_available(0).unwrap_or(candle_core::Device::Cpu);
+
+        // Create VarBuilder from buffer
+        // Note: to_vec() incurs a copy.
+        // Create VarBuilder from buffer
+        // Note: to_vec() incurs a copy.
+        let vb = candle_nn::VarBuilder::from_buffered_safetensors(
+            body_slice.to_vec(),
+            DType::F32,
+            &device,
+        )?;
+
+        // 5. Build Model
+        let mut model = BitLlama::load(config, vb)?;
+        model.precompute_for_inference()?;
+
+        // 6. Init State
+        let d_small = config.hidden_dim / 4;
+        let mut w_states = Vec::new();
+        for _ in 0..config.num_layers {
+            let w = Tensor::zeros((d_small, d_small), DType::F32, &device)?;
+            w_states.push(w);
+        }
+
+        Ok(Self {
+            model,
+            tokenizer,
+            device,
+            w_states,
+        })
+    }
+
     pub fn new<P: AsRef<Path>>(model_dir: P) -> anyhow::Result<Self> {
         let dir = model_dir.as_ref();
 
