@@ -6,11 +6,18 @@ target/
 *.log
 stop_signal
 
+# Project Specific
+pre_demon_test/
+projects/
+data/
+legacy/
+
 # Checkpoints and Models
 *.safetensors
 *.bin
+*.u32
 
-# Ignore all JSONs by default (configs/states/checkpoints)
+# Ignore all JSONs by default (configs/states/checkpoints/tokenizers in root)
 *.json
 
 # BUT allow specific source/template JSONs
@@ -29,3 +36,10 @@ __pycache__/
 # IDEs
 .gemini/
 .agent/
+
+# Test Artifacts
+dummy_*.txt
+dummy_*.u32
+build_log.txt
+clippy*.log
+train_debug*.log

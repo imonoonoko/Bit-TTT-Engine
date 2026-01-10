@@ -1,0 +1,25 @@
+[package]
+name = "cortex_rust-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+candle-core = "0.8.0"
+candle-nn = "0.8.0"
+anyhow = "1.0"
+byteorder = "1.5"
+
+[dependencies.cortex_rust]
+path = ".."
+
+[[bin]]
+name = "fuzz_target_1"
+path = "fuzz_targets/fuzz_target_1.rs"
+test = false
+doc = false
+bench = false

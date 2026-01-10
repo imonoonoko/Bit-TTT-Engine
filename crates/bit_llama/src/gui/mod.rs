@@ -1,0 +1,292 @@
+pub mod ui;
+
+use eframe::egui;
+use std::fs;
+use std::path::Path;
+
+use crate::config::ProjectConfig;
+use crate::state::ProjectState;
+
+const PROJECTS_DIR: &str = "projects";
+
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum AppTab {
+    Home,
+    DataPrep,
+    Preprocessing,
+    Training,
+    Settings,
+}
+
+pub struct BitStudioApp {
+    // Global State
+    pub tab: AppTab,
+    pub runtime: tokio::runtime::Runtime,
+
+    // UI State
+    pub new_project_name: String,
+    pub current_project: Option<ProjectState>,
+
+    // Project Selection
+    pub available_projects: Vec<String>,
+}
+
+impl Default for BitStudioApp {
+    fn default() -> Self {
+        // Initialize Tokio runtime
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create Tokio runtime");
+
+        // Ensure projects dir exists
+        let _ = fs::create_dir_all(PROJECTS_DIR);
+
+        Self {
+            tab: AppTab::Home,
+            runtime,
+            new_project_name: "MyModel".to_string(),
+            current_project: None,
+            available_projects: Self::scan_projects(),
+        }
+    }
+}
+
+impl BitStudioApp {
+    pub fn scan_projects() -> Vec<String> {
+        let mut projects = Vec::new();
+        if let Ok(entries) = fs::read_dir(PROJECTS_DIR) {
+            for entry in entries.flatten() {
+                if let Ok(ft) = entry.file_type() {
+                    if ft.is_dir() {
+                        if let Ok(name) = entry.file_name().into_string() {
+                            projects.push(name);
+                        }
+                    }
+                }
+            }
+        }
+        projects
+    }
+
+    pub fn create_project(&mut self) {
+        let name = self.new_project_name.trim().to_string();
+        if name.is_empty() {
+            return;
+        }
+
+        let path = Path::new(PROJECTS_DIR).join(&name);
+        if path.exists() {
+            return;
+        }
+
+        // Create directory structure
+        let _ = fs::create_dir_all(path.join("raw"));
+        let _ = fs::create_dir_all(path.join("data"));
+        let _ = fs::create_dir_all(path.join("models"));
+
+        // Save default config
+        let config = ProjectConfig {
+            name: name.clone(),
+            ..Default::default()
+        };
+        let config_json = serde_json::to_string_pretty(&config).unwrap();
+        let _ = fs::write(path.join("project.json"), config_json);
+
+        self.available_projects = Self::scan_projects();
+        self.load_project(&name);
+    }
+
+    pub fn load_project(&mut self, name: &str) {
+        let path = Path::new(PROJECTS_DIR).join(name);
+        let config_path = path.join("project.json");
+
+        let config = if config_path.exists() {
+            let data = fs::read_to_string(&config_path).unwrap_or_default();
+            serde_json::from_str(&data).unwrap_or_default()
+        } else {
+            ProjectConfig::default()
+        };
+
+        self.current_project = Some(ProjectState::new(path, config));
+        self.tab = AppTab::DataPrep;
+    }
+}
+
+impl eframe::App for BitStudioApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.set_pixels_per_point(1.2);
+
+        // Poll process status
+        if let Some(project) = &mut self.current_project {
+            if project.is_running {
+                if let Some(child) = &mut project.active_process {
+                    if let Ok(Some(_status)) = child.try_wait() {
+                        project.is_running = false;
+                        project.active_process = None;
+                        project.log("Process finished.");
+                        project.check_files();
+                    }
+                }
+            }
+        }
+
+        // Left Panel (Project Management)
+        egui::SidePanel::left("project_panel")
+            .resizable(true)
+            .default_width(220.0)
+            .show(ctx, |ui| {
+                ui.add_space(5.0);
+                ui.heading("📂 Projects");
+                ui.separator();
+
+                ui.collapsing("New Project", |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Name:");
+                        ui.text_edit_singleline(&mut self.new_project_name);
+                    });
+                    if ui.button("✨ Create").clicked() {
+                        self.create_project();
+                    }
+                });
+
+                ui.separator();
+
+                ui.label("Existing Projects:");
+                let projects = self.available_projects.clone();
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for proj in &projects {
+                        let is_selected = self
+                            .current_project
+                            .as_ref()
+                            .map_or(false, |p| p.config.name == *proj);
+                        if ui
+                            .selectable_label(is_selected, format!("📄 {}", proj))
+                            .clicked()
+                        {
+                            self.load_project(proj);
+                        }
+                    }
+                });
+
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                    ui.add_space(10.0);
+                    if self.current_project.is_some() {
+                        if ui.button("❌ Close Project").clicked() {
+                            self.current_project = None;
+                            self.tab = AppTab::Home;
+                            self.available_projects = Self::scan_projects();
+                        }
+                    }
+                    ui.separator();
+                });
+            });
+
+        // Main Content
+        if let Some(project) = &mut self.current_project {
+            // Log Panel
+            egui::TopBottomPanel::bottom("log_panel")
+                .resizable(true)
+                .default_height(150.0)
+                .show(ctx, |ui| {
+                    ui.heading("📟 Console Logs");
+                    egui::ScrollArea::vertical()
+                        .stick_to_bottom(true)
+                        .show(ui, |ui| {
+                            ui.add(
+                                egui::TextEdit::multiline(&mut project.get_logs())
+                                    .font(egui::TextStyle::Monospace)
+                                    .desired_width(f32::INFINITY),
+                            );
+                        });
+                });
+
+            // Nav Panel
+            egui::TopBottomPanel::top("nav_panel").show(ctx, |ui| {
+                ui.add_space(5.0);
+                ui.horizontal(|ui| {
+                    ui.heading(format!("🚀 {}", project.config.name));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if project.is_running {
+                            ui.spinner();
+                            ui.label(
+                                egui::RichText::new("Running...").color(egui::Color32::YELLOW),
+                            );
+                        } else {
+                            ui.label(egui::RichText::new("Idle").color(egui::Color32::GREEN));
+                        }
+                    });
+                });
+                ui.add_space(5.0);
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.tab, AppTab::DataPrep, "1️⃣ Data Prep");
+                    ui.selectable_value(&mut self.tab, AppTab::Preprocessing, "2️⃣ Preprocessing");
+                    ui.selectable_value(&mut self.tab, AppTab::Training, "3️⃣ Training");
+                    ui.selectable_value(&mut self.tab, AppTab::Settings, "⚙ Settings");
+                });
+                ui.add_space(5.0);
+            });
+
+            // Workspace
+            egui::CentralPanel::default().show(ctx, |ui| {
+                crate::gui::ui::render_workspace(self, ui);
+            });
+        }
+    }
+}
+
+pub fn run() -> Result<(), eframe::Error> {
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([1200.0, 800.0]),
+        ..Default::default()
+    };
+
+    eframe::run_native(
+        "🚀 Bit-Llama Studio",
+        options,
+        Box::new(|cc| {
+            setup_custom_fonts(&cc.egui_ctx);
+            Box::new(BitStudioApp::default())
+        }),
+    )
+}
+
+fn setup_custom_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    let font_candidates = if cfg!(target_os = "windows") {
+        vec![
+            "C:/Windows/Fonts/YuGothB.ttc",
+            "C:/Windows/Fonts/msgothic.ttc",
+        ]
+    } else {
+        vec![]
+    };
+
+    let mut font_data: Option<Vec<u8>> = None;
+    for path in font_candidates {
+        if std::path::Path::new(path).exists() {
+            if let Ok(data) = std::fs::read(path) {
+                font_data = Some(data);
+                break;
+            }
+        }
+    }
+
+    if let Some(data) = font_data {
+        fonts
+            .font_data
+            .insert("jp_font".to_owned(), egui::FontData::from_owned(data));
+        fonts
+            .families
+            .entry(egui::FontFamily::Proportional)
+            .or_default()
+            .insert(0, "jp_font".to_owned());
+        fonts
+            .families
+            .entry(egui::FontFamily::Monospace)
+            .or_default()
+            .insert(0, "jp_font".to_owned());
+        ctx.set_fonts(fonts);
+    }
+}

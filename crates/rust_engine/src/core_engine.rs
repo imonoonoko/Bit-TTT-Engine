@@ -62,8 +62,8 @@ use pyo3::{pyclass, pymethods};
 
 // --- RMSNorm ---
 pub struct RMSNorm {
-    weight: Tensor,
-    eps: f64,
+    pub weight: Tensor,
+    pub eps: f64,
 }
 
 impl RMSNorm {
@@ -158,9 +158,9 @@ impl BitLinear {
 
 // --- MLP (SwiGLU) ---
 pub struct SwiGLU {
-    w1: BitLinear, // Gate
-    w2: BitLinear, // Down
-    w3: BitLinear, // Up
+    pub w1: BitLinear, // Gate
+    pub w2: BitLinear, // Down
+    pub w3: BitLinear, // Up
 }
 
 impl SwiGLU {
@@ -294,7 +294,7 @@ impl TTTLayer {
 
         // Ensure we handle T not divisible by chunk_size if necessary (input.chunk handles this)
         // But manual iteration is safer for reshaping logic.
-        let num_chunks = (t_len + chunk_size - 1) / chunk_size;
+        let num_chunks = t_len.div_ceil(chunk_size);
 
         for i in 0..num_chunks {
             let start = i * chunk_size;
@@ -348,10 +348,10 @@ impl TTTLayer {
 
 // --- BitLlama Block ---
 pub struct BitLlamaBlock {
-    norm1: RMSNorm,
-    ttt: TTTLayer,
-    norm2: RMSNorm,
-    mlp: SwiGLU,
+    pub norm1: RMSNorm,
+    pub ttt: TTTLayer,
+    pub norm2: RMSNorm,
+    pub mlp: SwiGLU,
 }
 
 impl BitLlamaBlock {
@@ -431,7 +431,7 @@ pub struct BitLlama {
 // --- BitLlamaConfig (Python Version) ---
 #[cfg(feature = "python")]
 #[pyclass]
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, serde::Serialize)]
 pub struct BitLlamaConfig {
     #[pyo3(get, set)]
     pub vocab_size: usize,
@@ -460,7 +460,7 @@ impl BitLlamaConfig {
 
 // --- BitLlamaConfig (Rust Version) ---
 #[cfg(not(feature = "python"))]
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, serde::Serialize)]
 pub struct BitLlamaConfig {
     pub vocab_size: usize,
     pub hidden_dim: usize,
@@ -564,6 +564,50 @@ impl BitLlama {
 
         Ok(logits)
     }
+    pub fn collect_tensors(&self) -> std::collections::HashMap<String, Tensor> {
+        let mut tensors = std::collections::HashMap::new();
+        tensors.insert(
+            "embed.weight".to_string(),
+            self.embedding.embeddings().clone(),
+        );
+
+        for (i, layer) in self.layers.iter().enumerate() {
+            let prefix = format!("layers.{}", i);
+            tensors.insert(
+                format!("{}.norm1.weight", prefix),
+                layer.norm1.weight.clone(),
+            );
+            tensors.insert(
+                format!("{}.ttt.down.weight", prefix),
+                layer.ttt.proj_down.weight.clone(),
+            );
+            tensors.insert(
+                format!("{}.ttt.up.weight", prefix),
+                layer.ttt.proj_up.weight.clone(),
+            );
+            tensors.insert(
+                format!("{}.norm2.weight", prefix),
+                layer.norm2.weight.clone(),
+            );
+            tensors.insert(
+                format!("{}.mlp.gate_proj.weight", prefix),
+                layer.mlp.w1.weight.clone(),
+            );
+            tensors.insert(
+                format!("{}.mlp.down_proj.weight", prefix),
+                layer.mlp.w2.weight.clone(),
+            );
+            tensors.insert(
+                format!("{}.mlp.up_proj.weight", prefix),
+                layer.mlp.w3.weight.clone(),
+            );
+        }
+
+        tensors.insert("norm_f.weight".to_string(), self.norm.weight.clone());
+        tensors.insert("lm_head.weight".to_string(), self.lm_head.weight().clone());
+
+        tensors
+    }
 }
 
 // --- High-Level Rust API (Llama) ---
@@ -582,25 +626,33 @@ impl Llama {
     /// - Directory (Legacy: needs config.json + tokenizer.json + model.safetensors)
     /// - `.safetensors` file (Legacy: infers parent directory)
     pub fn load_auto<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+        let device = candle_core::Device::cuda_if_available(0).unwrap_or(candle_core::Device::Cpu);
+        Self::load_auto_with_device(path, &device)
+    }
+
+    pub fn load_auto_with_device<P: AsRef<Path>>(
+        path: P,
+        device: &candle_core::Device,
+    ) -> anyhow::Result<Self> {
         let path = path.as_ref();
 
         if path.is_file() {
             if let Some(ext) = path.extension() {
                 if ext == "bitt" {
-                    return Self::from_bitt_file(path);
+                    return Self::from_bitt_file_with_device(path, device);
                 } else if ext == "safetensors" {
                     // Assume parent dir contains config/tokenizer
                     let parent = path.parent().unwrap_or(Path::new("."));
-                    return Self::new(parent);
+                    return Self::new_with_device(parent, device);
                 }
             }
         } else if path.is_dir() {
-            return Self::new(path);
+            return Self::new_with_device(path, device);
         }
 
         // Fallback to trying as BITT if file, or error
-        Self::from_bitt_file(path)
-            .or_else(|_| Self::new(path))
+        Self::from_bitt_file_with_device(path, device)
+            .or_else(|_| Self::new_with_device(path, device))
             .map_err(|_| {
                 anyhow::anyhow!(
                     "Failed to load model from {:?}. Not a valid .bitt file or legacy directory.",
@@ -610,7 +662,6 @@ impl Llama {
     }
 
     /// Bit-TTT Native Container (.bitt) Loader
-
     /// Fast loading from a single file containing Config, Tokenizer, and Weights.
     pub fn from_bitt_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let device = candle_core::Device::cuda_if_available(0).unwrap_or(candle_core::Device::Cpu);
@@ -783,21 +834,28 @@ impl Llama {
 
         all_tokens.push(next_token);
 
-        // Decode and yield first generated token
-        // Use single-token decoding or differential decoding?
-        // Tokenizers can be tricky with partial decoding.
-        // Simple approach: Decode(all) - Decode(prev) is sometimes wrong for subwords.
-        // Better: Decode(chunk).
-        // Let's just decode the single token for now, verifying it works for most cases.
-        let token_str = self
+        // 3. Generation Loop with Cumulative Decoding
+        // For byte-level BPE tokenizers, single-token decoding produces escape sequences.
+        // We use cumulative decoding: decode(all_generated_tokens) and output the delta.
+        let mut generated_tokens: Vec<u32> = vec![next_token];
+
+        // Initialize prev_decoded - decode first generated token
+        let mut prev_decoded = self
             .tokenizer
-            .decode(&[next_token], true)
+            .decode(&generated_tokens, true)
             .map_err(|e| anyhow::anyhow!(e))?;
-        if !callback(&token_str)? {
-            return Ok(token_str); // Abort
+
+        // Output first token if not empty
+        if !prev_decoded.is_empty() {
+            if !callback(&prev_decoded)? {
+                let full_text = self
+                    .tokenizer
+                    .decode(&all_tokens, true)
+                    .map_err(|e| anyhow::anyhow!(e))?;
+                return Ok(full_text);
+            }
         }
 
-        // 3. Generation Loop
         for _ in 0..(max_tokens - 1) {
             let input = Tensor::new(&[next_token], &self.device)?;
             let logits = self.model.forward_one(&input, &mut self.w_states)?;
@@ -808,15 +866,55 @@ impl Llama {
             next_token = Self::sample_multinomial(&prs_vec)?;
 
             all_tokens.push(next_token);
+            generated_tokens.push(next_token);
 
-            // Streaming output
-            let token_str = self
+            // Cumulative decode: decode all generated tokens, output the new portion
+            let current_decoded = self
                 .tokenizer
-                .decode(&[next_token], true)
+                .decode(&generated_tokens, true)
                 .map_err(|e| anyhow::anyhow!(e))?;
-            if !callback(&token_str)? {
-                break;
+
+            // Calculate delta (new characters since last decode)
+            let delta = if current_decoded.len() > prev_decoded.len() {
+                &current_decoded[prev_decoded.len()..]
+            } else {
+                // Edge case: tokenizer may produce shorter output (unlikely but safe)
+                &current_decoded
+            };
+
+            // Debug: Check if delta contains byte escapes and try to fix
+            // The tokenizers library may return "\xNN" strings for raw byte tokens
+            let processed_delta = if delta.contains("\\x") {
+                // Try to interpret as escaped bytes
+                // Pattern: \xNN where NN is hex
+                let mut result = String::new();
+                let mut chars = delta.chars().peekable();
+                while let Some(c) = chars.next() {
+                    if c == '\\' {
+                        if chars.peek() == Some(&'x') {
+                            chars.next(); // consume 'x'
+                            let hex: String = chars.by_ref().take(2).collect();
+                            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                                result.push(byte as char);
+                            }
+                        } else {
+                            result.push(c);
+                        }
+                    } else {
+                        result.push(c);
+                    }
+                }
+                result
+            } else {
+                delta.to_string()
+            };
+
+            if !processed_delta.is_empty() {
+                if !callback(&processed_delta)? {
+                    break;
+                }
             }
+            prev_decoded = current_decoded;
         }
 
         let full_text = self
@@ -824,6 +922,80 @@ impl Llama {
             .decode(&all_tokens, true)
             .map_err(|e| anyhow::anyhow!(e))?;
         Ok(full_text)
+    }
+
+    pub fn export_to_bitt<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
+        let path = path.as_ref();
+        use std::io::Write;
+
+        // 1. Collect Tensors
+        let tensors = self.model.collect_tensors();
+
+        // 2. Serialize Tensors to Buffer (Safetensors)
+        // candle_core doesn't expose easy "save to buffer", but we can use safetensors crate directly if needed.
+        // Or write to a temp file? writing to memory is better.
+        // Actually, candle provides `save_to_file`. To save to buffer...
+        // We can use `safetensors::tensor::serialize`. We need to convert Candle Tensor to View.
+        // This is complex. Is there a simpler way?
+        // candle::safetensors::save returns Result<()>.
+        // Let's rely on `safetensors::SomeFunc`?
+        // Wait, `candle` re-exports safetensors? No.
+        // Let's just assume we can use a helper or write to a temporary buffer using `candle_core::pickle`? No.
+        // Use `candle_core::safetensors::save` to a generic Writer? It only takes a Path.
+        //
+        // Workaround: We will use `safetensors::tensor::serialize` but that requires `safetensors` dependency with `candle` features.
+        //
+        // Easier: Write the safetensors part to a temporary file, read it back, then concat.
+        // Or just implement the header writing manually and append the standard file.
+        //
+        // Strategy:
+        // 1. Write Header to File.
+        // 2. Append Safetensors body.
+        // But `candle_core::safetensors::save` overwrites the file.
+        //
+        // Correct Strategy using available APIs:
+        // 1. Write Safetensors to a temporary file.
+        // 2. Read it all into memory (or stream copy).
+        // 3. Construct Final File: Magic + Len + HeaderJSON + SafetensorsBody.
+
+        // A. Create Safetensors Blob
+        let temp_path = path.with_extension("temp.safetensors");
+        candle_core::safetensors::save(&tensors, &temp_path)?;
+        let safetensors_bytes = std::fs::read(&temp_path)?;
+        let _ = std::fs::remove_file(temp_path); // Cleanup
+
+        // B. Create Header
+        let config_json = serde_json::to_value(self.model.config)?;
+        // Tokenizer: we need the JSON string. `tokenizer.to_string(true)`?
+        // method is `save(path, pretty)` or `to_string(pretty)`.
+        let tokenizer_json_str = self
+            .tokenizer
+            .to_string(false)
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        let header = serde_json::json!({
+            "config": config_json,
+            "tokenizer": tokenizer_json_str
+        });
+        let header_vec = serde_json::to_vec(&header)?;
+        let header_len = header_vec.len() as u64;
+
+        // C. Write Final File
+        let mut file = std::fs::File::create(path)?;
+
+        // Magic
+        file.write_all(b"BITT")?;
+
+        // Header Len (u64 LE)
+        file.write_all(&header_len.to_le_bytes())?;
+
+        // Header
+        file.write_all(&header_vec)?;
+
+        // Body
+        file.write_all(&safetensors_bytes)?;
+
+        Ok(())
     }
 
     fn sample_multinomial(probs: &[f32]) -> anyhow::Result<u32> {

@@ -23,11 +23,12 @@ pub extern "C" fn ttt_create(hidden_dim: usize, inner_lr: f32) -> *mut TTTLayer 
 /// Must be called once done with the pointer.
 ///
 /// # Safety
-/// - `ptr` must be a valid pointer to `TTTLayer` created by `ttt_create`, or null.
-/// - After calling this function, `ptr` is invalid and must not be used.
+/// - `ptr` must be a valid pointer obtained from `ttt_create`.
+/// - Double-freeing (calling this twice on same ptr) causes Undefined Behavior.
 #[no_mangle]
 pub unsafe extern "C" fn ttt_destroy(ptr: *mut TTTLayer) {
     if !ptr.is_null() {
+        // Drop the box, freeing memory
         let _ = Box::from_raw(ptr);
     }
 }
@@ -46,10 +47,23 @@ pub unsafe extern "C" fn ttt_forward(
     seq_len: usize,
     output_ptr: *mut f32,
 ) -> i32 {
-    // SAFETY: We verify ptr is not null immediately.
+    // # Safety
+    // This function acts as a raw FFI entry point.
+    // The caller *MUST* guarantee:
+    // 1. `ptr` is a valid pointer returned by `ttt_create` and has not been destroyed.
+    // 2. `input_ptr` points to a valid memory region of at least `seq_len * hidden_dim` f32 elements.
+    // 3. `output_ptr` points to a mutable memory region of at least `seq_len * hidden_dim` f32 elements.
+    // 4. `seq_len` matches the actual data length provided.
+    //
+    // Internal checks for NULL are performed, but invalid non-null pointers will cause Undefined Behavior.
+
+    // Validate non-null inputs immediately
     if ptr.is_null() || input_ptr.is_null() || output_ptr.is_null() {
         return BitTTTError::NullPointer as i32;
     }
+
+    // DEBUG: Basic sanity check
+    debug_assert!(seq_len > 0, "Sequence length must be positive");
 
     let model = &*ptr; // SAFETY: ptr is checked non-null. Caller guarantees validity.
     let dim = model.hidden_dim;

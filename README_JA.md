@@ -133,5 +133,9 @@ cargo build --release --no-default-features
 - `device="cpu"` (省略時のデフォルト)
 - `device="cuda"` (CUDA環境が必要)
 
+## サポート
+
+**Orynth CA**: `13ui3nmE7smmK3Pk8wyKb7RE6wHyMJCcWgCeMRRdoory`
+
 ---
 *Created by Project Bit-TTT.*

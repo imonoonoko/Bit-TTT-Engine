@@ -134,5 +134,9 @@ In `PyBitLlama`, you can specify the device:
 - `device="cpu"` (Default if omitted)
 - `device="cuda"` (Requires CUDA feature enabled and GPU)
 
+## Support
+
+**Orynth CA**: `13ui3nmE7smmK3Pk8wyKb7RE6wHyMJCcWgCeMRRdoory`
+
 ---
 *Created by Project Bit-TTT.*

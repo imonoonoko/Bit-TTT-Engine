@@ -1,67 +1,28 @@
-//! Bit-TTT All-in-One Binary (`bit-ttt`)
-//!
-//! Handlers:
-//! - No args: Launch GUI
-//! - `run`: Launch CLI Chat
-//! - `list`: List Models
+use anyhow::Result;
+use bit_llama::cli::{Cli, Commands};
+use bit_llama::{data, evaluate, export, gui, inference, train, vocab};
+use clap::Parser;
 
-mod chat;
-mod cli_mode;
-mod gui_mode;
+fn main() -> Result<()> {
+    // Initialize logging
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
-use clap::{Parser, Subcommand};
-
-#[derive(Parser)]
-#[command(name = "bit-ttt", about = "Bit-TTT Ecosystem All-in-One Tool")]
-struct Cli {
-    #[command(subcommand)]
-    command: Option<Commands>,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    /// Load a model and start chatting (CLI Mode)
-    Run {
-        /// Path to .bitt file or model directory
-        #[arg(required = true)]
-        model_path: String,
-
-        /// Sampling Temperature
-        #[arg(short, long, default_value_t = 0.8)]
-        temperature: f64,
-
-        /// Max Generation Tokens
-        #[arg(long, default_value_t = 200)]
-        max_tokens: usize,
-
-        /// System Prompt
-        #[arg(long, default_value = "You are a helpful AI assistant.")]
-        system: String,
-    },
-    /// List available models
-    List,
-}
-
-fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(Commands::Run {
-            model_path,
-            temperature,
-            max_tokens,
-            system,
-        }) => {
-            cli_mode::run_chat(&model_path, temperature, max_tokens, &system)?;
+        Some(Commands::Gui) | None => {
+            if let Err(e) = gui::run() {
+                eprintln!("GUI Error: {}", e);
+            }
         }
-        Some(Commands::List) => {
-            cli_mode::list_models()?;
-        }
-        None => {
-            // Default to GUI Mode
-            println!("🖥️ Launching GUI Mode...");
-            gui_mode::run().map_err(|e| anyhow::anyhow!("GUI Error: {}", e))?;
-        }
+        Some(Commands::Train(args)) => train::run(args)?,
+        Some(Commands::Data(args)) => data::run(args)?,
+        Some(Commands::Vocab(args)) => vocab::run(args)?,
+        Some(Commands::Export(args)) => export::run(args)?,
+        Some(Commands::Inference(args)) => inference::run(args)?,
+        Some(Commands::Evaluate(args)) => evaluate::run(args)?,
     }
 
     Ok(())
