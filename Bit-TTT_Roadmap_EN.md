@@ -4,6 +4,7 @@ This document visualizes the engineering process of the Bit-TTT project and the 
 
 🗺️ Roadmap Flowchart
 
+```mermaid
 graph TD
     %% Class Defaults
     classDef done fill:#d4edda,stroke:#28a745,stroke-width:2px,color:#155724;
@@ -52,6 +53,7 @@ graph TD
 
     %% Style Application
     linkStyle 0,1,3 stroke-width:4px,stroke:#dc3545,fill:none;
+```
 
 
 📝 Phase Explanation

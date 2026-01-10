@@ -4,6 +4,7 @@ Bit-TTT エンジニアリングロードマップ
 
 🗺️ ロードマップ・フローチャート
 
+```mermaid
 graph TD
     %% クラス定義
     classDef done fill:#d4edda,stroke:#28a745,stroke-width:2px,color:#155724;
@@ -52,6 +53,7 @@ graph TD
 
     %% スタイルの適用
     linkStyle 0,1,3 stroke-width:4px,stroke:#dc3545,fill:none;
+```
 
 
 📝 各フェーズの解説
