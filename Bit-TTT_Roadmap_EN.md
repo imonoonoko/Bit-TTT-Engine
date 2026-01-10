@@ -12,28 +12,28 @@ graph TD
     classDef future fill:#e2e3e5,stroke:#adb5bd,stroke-width:1px,color:#383d41;
 
     %% Node Definitions
-    Start((Phase A<br/>Done)):::done
+    Start(("Phase A<br/>Done")):::done
 
-    subgraph Phase_B0 [🛑 Phase B-0: Structural Fix]
-        B0[Fix Command Invocation<br/>cargo run → current_exe]:::urgent
-        noteB0[Required for<br/>distribution]
+    subgraph Phase_B0 ["🛑 Phase B-0: Structural Fix"]
+        B0["Fix Command Invocation<br/>cargo run → current_exe"]:::urgent
+        noteB0["Required for<br/>distribution"]
         B0 -.- noteB0
     end
 
-    subgraph Phase_B [🚧 Phase B: Integration]
-        B1[Log Streaming<br/>state.rs → GUI Console]:::next
-        B2[Config Sync<br/>Config → CLI Args]:::next
-        B3[Error Handling<br/>Process Monitoring/Stopping]:::next
+    subgraph Phase_B ["🚧 Phase B: Integration"]
+        B1["Log Streaming<br/>state.rs → GUI Console"]:::next
+        B2["Config Sync<br/>Config → CLI Args"]:::next
+        B3["Error Handling<br/>Process Monitoring/Stopping"]:::next
     end
 
-    subgraph Phase_C [📊 Phase C: Visualization]
-        C1[Learning Curve<br/>Loss Parsing & Plot]:::future
-        C2[VRAM Monitoring<br/>Real usage check]:::future
+    subgraph Phase_C ["📊 Phase C: Visualization"]
+        C1["Learning Curve<br/>Loss Parsing & Plot"]:::future
+        C2["VRAM Monitoring<br/>Real usage check"]:::future
     end
 
-    subgraph Phase_D [⚡ Phase D: Completion]
-        D1[Inference Playground<br/>Chat UI]:::future
-        D2[Release Build<br/>Distribution Package]:::future
+    subgraph Phase_D ["⚡ Phase D: Completion"]
+        D1["Inference Playground<br/>Chat UI"]:::future
+        D2["Release Build<br/>Distribution Package"]:::future
     end
 
     %% Dependencies
