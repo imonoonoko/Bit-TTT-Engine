@@ -139,7 +139,7 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                                 &corpus_path,
                                 "--tokenizer",
                                 &tokenizer_path,
-                                "--output",
+                                "--output-dir",
                                 &prefix,
                             ],
                         );
