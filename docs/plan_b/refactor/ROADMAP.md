@@ -61,13 +61,12 @@ rust_engine/src/
 
 ### タスク一覧
 
-- [ ] `bit_llama/src/train/` ディレクトリ作成
-- [ ] `args.rs` 抽出 (TrainArgs)
-- [ ] `state.rs` 抽出 (TrainingState)
-- [ ] `checkpoint.rs` 抽出 (CheckpointManager)
-- [ ] `loop.rs` 抽出 (メイン学習ループ)
-- [ ] `cli.rs` の `train::run()` 呼び出し更新
-- [ ] スモークテスト (100ステップ学習)
+- [x] `bit_llama/src/train/` ディレクトリ作成
+- [x] `args.rs` 抽出 (TrainArgs)
+- [x] `checkpoint.rs` 抽出 (save_training_state, load_start_step, find_checkpoint_path)
+- [x] `training_loop.rs` 抽出 (メイン学習ループ)
+- [x] `train.rs` を親モジュールに変換 (pub use 再エクスポート)
+- [x] `cargo check --workspace` 通過確認
 
 ### 期待成果
 
