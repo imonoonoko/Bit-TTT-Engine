@@ -1,7 +1,7 @@
 #![no_main]
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use cortex_rust::core_engine::TTTLayer;
+use cortex_rust::TTTLayer;
 use libfuzzer_sys::fuzz_target;
 use std::collections::HashMap;
 

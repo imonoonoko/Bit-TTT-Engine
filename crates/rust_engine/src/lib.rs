@@ -5,25 +5,35 @@
 
 #![allow(non_local_definitions)]
 
-pub mod core_engine;
+// Core modules (Rust 2018+ style)
+pub mod layers;
+pub mod model;
+pub mod python;
+
+// Legacy module (deprecated)
 pub mod legacy;
 
-// Legacy re-exports (Deprecated: use core_engine types instead)
-#[deprecated(since = "0.2.0", note = "Use cortex_rust::CandleTTTLayer instead")]
-pub use legacy::bit_linear::BitLinear;
-#[deprecated(since = "0.2.0", note = "Use cortex_rust::CandleTTTLayer instead")]
-pub use legacy::ttt_layer::TTTLayer;
+// Legacy re-exports (Deprecated: use model types instead)
+#[deprecated(since = "0.2.0", note = "Use cortex_rust::model::layers instead")]
+pub use legacy::bit_linear::BitLinear as LegacyBitLinear;
+#[deprecated(since = "0.2.0", note = "Use cortex_rust::model::layers instead")]
+pub use legacy::ttt_layer::TTTLayer as LegacyTTTLayer;
 
-// New Core Engine re-exports
-pub use core_engine::{BitLlama, BitLlamaBlock, BitLlamaConfig, Llama, TTTLayer as CandleTTTLayer};
+// Primary public API re-exports
+pub use layers::{BitLinear, RMSNorm, SwiGLU, TTTLayer};
+pub use model::{BitLlama, BitLlamaBlock, BitLlamaConfig, Llama};
 
+// Alias for backward compatibility
+pub use model::TTTLayer as CandleTTTLayer;
+
+// Python module registration
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
 #[cfg(feature = "python")]
 #[pymodule]
 fn cortex_rust(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_class::<BitLlamaConfig>()?;
-    m.add_class::<core_engine::PyBitLlama>()?;
+    m.add_class::<model::BitLlamaConfig>()?;
+    m.add_class::<python::PyBitLlama>()?;
     Ok(())
 }

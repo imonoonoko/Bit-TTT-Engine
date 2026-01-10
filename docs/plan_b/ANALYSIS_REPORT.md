@@ -1,42 +1,128 @@
-# Analysis Report: GUI Enhancement (Phase C)
+# ANALYSIS_REPORT.md - Bit-TTT リファクタリング分析
 
-## 1. Structural Analysis (As-Is)
+**作成日**: 2026-01-11
+**目的**: リファクタリング対象のスコープ特定および技術的負債の可視化
 
-Currently, the Bit-Llama Studio GUI is built using `eframe` (egui) and is monolithic in nature.
-Its primary structure is defined in `crates/bit_llama/src/gui/mod.rs` and `ui.rs`.
+---
 
-### Core Components
-*   **BitStudioApp (`gui/mod.rs`)**:
-    *   Manages Global State (`current_project`, `available_projects`).
-    *   Manages UI State (`tab`, `new_project_name`).
-    *   Updates logic (polling process, handling messages).
-    *   Renders the Main Layout (Sidebar + Top/Bottom Panels).
-*   **ProjectConfig (`config.rs`)**:
-    *   Defines the data model for project settings.
-    *   Includes logic for VRAM estimation (`estimate_vram_usage`).
-*   **ProjectState (`state.rs`)**:
-    *   Manages runtime state of a specific project (process handle, logs).
-    *   *Note: Needs verification of `state.rs` content.*
+## 1. プロジェクト構造概要
 
-### Current Limitations
-1.  **Monolithic UI Render**: Adding complex features (like detailed monitoring graphs or advanced dataset tools) in the current structure might bloat `update` loop.
-2.  **Basic Process Management**: Polling `try_wait()` in the main UI thread works for now, but might freeze UI if synchronous operations occur.
-3.  **Limited Feedback**: User logs are just a text blob. No structured event stream in GUI.
+```
+crates/
+├── bit_llama/        # アプリケーション層 (CLI, GUI, Training Pipeline)
+│   └── src/
+│       ├── cli.rs          (867B)  - CLIエントリーポイント
+│       ├── config.rs       (3KB)   - 設定管理
+│       ├── data.rs         (5KB)   - データ前処理
+│       ├── evaluate.rs     (5KB)   - 評価パイプライン
+│       ├── export.rs       (2KB)   - モデルエクスポート
+│       ├── gui/            (3ファイル) - GUI (eframe)
+│       ├── inference.rs    (1.5KB) - 推論ラッパー
+│       ├── loader.rs       (3KB)   - 共通DataLoader
+│       ├── state.rs        (8KB)   - GUIランタイム状態
+│       ├── train.rs        (20KB, 565L) ⚠️ - 学習ループ（要リファクタリング）
+│       └── vocab.rs        (3KB)   - トークナイザー学習
+└── rust_engine/      # コアエンジン層 (モデルアーキテクチャ)
+    └── src/
+        ├── core_engine.rs  (39KB, 1097L) ⚠️ - BitLlama実装（要分割）
+        ├── legacy/         (deprecated ndarray実装)
+        │   ├── bit_linear.rs
+        │   ├── ttt_layer.rs
+        │   └── c_api.rs
+        └── lib.rs          - 公開API
+```
 
-## 2. Intent Verification (To-Be)
+---
 
-We aim to enhance the GUI to support **Advanced Training Workflows** and **Better Observability**.
+## 2. 技術的負債の特定
 
-*   **Goal**: Make "Bit-Llama Studio" a complete IDE for model training.
-*   **Key Features Needed**:
-    *   **Real-time Monitoring**: Loss curves, VRAM usage (actual vs estimated).
-    *   **Advanced Config**: Expose more hyperparameters (which we added in `ProjectConfig` but UI might not show all).
-    *   **Better Safety**: The VRAM estimation is a good start, but need per-step validation.
-    *   **Internationalization**: Japanese font support is already there (`ui.rs`/`mod.rs`), need to ensure all new UI elements use it.
+### 🔴 高優先度
 
-## 3. Scope of Change
-*   **Files**:
-    *   `src/gui/mod.rs`: Main loop enhancements.
-    *   `src/gui/ui.rs`: Component library.
-    *   `src/state.rs`: Enhanced process management.
-    *   `config.rs`: (Already updated, UI needs to match).
+| ファイル | 問題点 | 推奨アクション |
+|----------|--------|----------------|
+| `core_engine.rs` | **1097行の巨大ファイル**。RMSNorm, BitLinear, SwiGLU, TTTLayer, BitLlamaBlock, Llama, PyBitLlama が全て同一ファイル | モジュール分割: `layers/`, `model.rs`, `python.rs` |
+| `train.rs` | **565行のモノリシック関数 `run()`** (L101-L564)。設定、ループ、保存、ログが混在 | 責務分離: `TrainingLoop`, `CheckpointManager`, `MetricsLogger` |
+| `legacy/` | **Deprecated** だが残存。ndarray依存。 | Phase完了後に安全に削除可能か確認 |
+
+### 🟡 中優先度
+
+| ファイル | 問題点 | 推奨アクション |
+|----------|--------|----------------|
+| `state.rs` | `ProjectState` が肥大化 (7901B)。ログ、プロセス管理、ファイル操作が混在 | `LogManager`, `ProcessManager` への分離検討 |
+| `gui/mod.rs` | `BitStudioApp` が状態+描画+ビジネスロジックを保持 | MVVMパターン導入検討 |
+| `loader.rs` | `BitLoader` がメモリマップとイテレータの両方を担当 | 単一責任原則に沿って分離 |
+
+### 🟢 低優先度
+
+| ファイル | 問題点 | 推奨アクション |
+|----------|--------|----------------|
+| `cli.rs` | 現状で良好 | - |
+| `config.rs` | 現状で良好 | - |
+| `export.rs` | 現状で良好 | - |
+
+---
+
+## 3. 設計意図の言語化
+
+### `core_engine.rs` の設計
+
+- **BitLinear**: 1.58-bit量子化線形層。学習時はfp32、推論時は量子化済み重みを使用。
+- **TTTLayer**: Test-Time Training層。`forward_update` (逐次) と `forward_chunkwise` (並列) の2つの実行パス。
+- **BitLlamaBlock**: Attention + MLP + Residual を束ねるブロック。
+- **Llama**: 複数のBlockを積み重ねた完全なモデル。
+
+### `train.rs` の設計
+
+- **`run()` 関数**: 単一の巨大関数で学習全体を制御。
+  - L101-150: 初期化 (Device, Tokenizer, DataLoader)
+  - L150-300: モデル構築
+  - L300-500: 学習ループ
+  - L500-564: チェックポイント保存
+
+---
+
+## 4. リファクタリングスコープ提案
+
+### Phase 1 (Core): `core_engine.rs` のモジュール分割
+
+```
+rust_engine/src/
+├── layers/
+│   ├── mod.rs
+│   ├── rms_norm.rs      (RMSNorm)
+│   ├── bit_linear.rs    (BitLinear)
+│   ├── swiglu.rs        (SwiGLU)
+│   └── ttt.rs           (TTTLayer)
+├── model/
+│   ├── mod.rs
+│   ├── block.rs         (BitLlamaBlock)
+│   └── llama.rs         (Llama)
+├── python.rs            (PyO3 バインディング)
+├── config.rs            (BitLlamaConfig)
+└── lib.rs               (公開API)
+```
+
+### Phase 2 (Enhancement): `train.rs` のリファクタリング
+
+```
+bit_llama/src/train/
+├── mod.rs
+├── args.rs              (TrainArgs)
+├── loop.rs              (TrainingLoop trait/impl)
+├── checkpoint.rs        (CheckpointManager)
+└── metrics.rs           (MetricsLogger)
+```
+
+---
+
+## 5. リスク評価
+
+| リスク | 影響度 | 緩和策 |
+|--------|--------|--------|
+| PyO3 バインディングの破損 | 高 | `#[cfg(feature = "python")]` を維持しつつ慎重に移動 |
+| 学習ループのリグレッション | 高 | 既存テスト (`pre_demon.py`) の活用 |
+| API互換性の破壊 | 中 | `pub use` による再エクスポートで互換性維持 |
+
+---
+
+**次のステップ**: Step 2 (Dependency Mapping) で依存関係図を作成
