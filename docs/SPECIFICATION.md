@@ -1,0 +1,158 @@
+# Bit-TTT Engine Specification
+
+**Version**: 1.0.0  
+**Last Updated**: 2026-01-11
+
+---
+
+## 1. Overview
+
+Bit-TTT Engine is a high-performance language model implementation combining:
+- **BitNet 1.58-bit Quantization**: Ternary weights {-1, 0, +1}
+- **Test-Time Training (TTT)**: Online learning replacing traditional attention
+
+## 2. Core Components
+
+### 2.1 Layers (`cortex_rust::layers`)
+
+| Layer | Purpose | Parameters |
+|-------|---------|------------|
+| `RMSNorm` | Root Mean Square Normalization | `dim`, `eps` |
+| `BitLinear` | 1.58-bit quantized linear layer | `in_dim`, `out_dim` |
+| `SwiGLU` | Gated MLP with SiLU activation | `hidden_dim`, `intermediate_dim` |
+| `TTTLayer` | Test-Time Training layer | `hidden_dim`, `inner_lr` |
+
+### 2.2 Model (`cortex_rust::model`)
+
+| Component | Description |
+|-----------|-------------|
+| `BitLlamaConfig` | Model configuration (vocab_size, hidden_dim, num_layers, inner_lr) |
+| `BitLlamaBlock` | Single transformer block: Norm → TTT → Norm → MLP |
+| `BitLlama` | Full model with embedding, N blocks, and LM head |
+| `Llama` | High-level API with tokenizer and state management |
+
+### 2.3 Training (`bit_llama::train`)
+
+| Module | Responsibility |
+|--------|----------------|
+| `args.rs` | CLI argument parsing (dim, layers, lr, steps, etc.) |
+| `checkpoint.rs` | Training state persistence (save/load) |
+| `training_loop.rs` | Main training loop with cosine LR schedule |
+
+## 3. Data Flow
+
+```
+Input Text
+    │
+    ▼
+┌─────────────────┐
+│   Tokenizer     │  → Token IDs [u32]
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│   Embedding     │  → Hidden States (B, T, D)
+└─────────────────┘
+    │
+    ▼ (× N layers)
+┌─────────────────┐
+│  BitLlamaBlock  │
+│  ├─ RMSNorm     │
+│  ├─ TTTLayer    │  → Online weight update
+│  ├─ RMSNorm     │
+│  └─ SwiGLU      │
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│   RMSNorm       │
+│   LM Head       │  → Logits (B, T, V)
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│   Sampling      │  → Next Token
+└─────────────────┘
+```
+
+## 4. File Formats
+
+### 4.1 Model Checkpoint (`.safetensors`)
+Standard safetensors format with weight names:
+- `embed.weight`
+- `layers.{i}.norm1.weight`
+- `layers.{i}.ttt.down.weight`
+- `layers.{i}.ttt.up.weight`
+- `layers.{i}.norm2.weight`
+- `layers.{i}.mlp.gate_proj.weight`
+- `layers.{i}.mlp.down_proj.weight`
+- `layers.{i}.mlp.up_proj.weight`
+- `norm_f.weight`
+- `lm_head.weight`
+
+### 4.2 Config (`config.json`)
+```json
+{
+  "vocab_size": 16384,
+  "hidden_dim": 256,
+  "num_layers": 8,
+  "inner_lr": 0.1
+}
+```
+
+### 4.3 Native Container (`.bitt`)
+Single-file format containing:
+- Magic: `BITT` (4 bytes)
+- Header length (u64 LE)
+- Header JSON (config + tokenizer)
+- Safetensors body
+
+## 5. Training Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `dim` | 256 | Model hidden dimension |
+| `layers` | 8 | Number of transformer blocks |
+| `context_len` | 128 | Maximum context length |
+| `batch_size` | 16 | Training batch size |
+| `lr` | 3e-4 | Peak learning rate |
+| `warmup_steps` | 100 | LR warmup steps |
+| `min_lr` | 1e-5 | Minimum learning rate |
+| `save_interval` | 500 | Checkpoint save frequency |
+
+## 6. Hardware Requirements
+
+| Configuration | Minimum VRAM | Recommended |
+|---------------|--------------|-------------|
+| 256-dim, 8-layer | 2 GB | 4 GB |
+| 512-dim, 12-layer | 4 GB | 8 GB |
+| 1024-dim, 24-layer | 8 GB | 16 GB |
+
+## 7. API Reference
+
+### Rust API
+```rust
+use cortex_rust::{BitLlama, BitLlamaConfig, Llama};
+
+// Load model
+let llama = Llama::load_auto("models/my_model")?;
+
+// Stream completion
+llama.stream_completion("Hello", 100, 0.8, |token| {
+    print!("{}", token);
+    Ok(true)
+})?;
+```
+
+### Python API
+```python
+import cortex_rust
+
+config = cortex_rust.BitLlamaConfig(16384, 256, 8, 0.1)
+model = cortex_rust.BitLlama(config, "model.safetensors", device="cuda")
+logits = model.forward(token_id=42)
+```
+
+---
+
+*Bit-TTT Engine Specification v1.0.0*

@@ -1,142 +1,158 @@
 # Bit-TTT Engine: High-Performance Brain Core
 
-**1.58-bit Quantization + Test-Time Training (TTT)** Implementation in Rust.
-This engine powers the next generation of efficient, adaptive AI models.
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Build Status](https://github.com/imonoonoko/Bit-TTT-Engine/actions/workflows/rust.yml/badge.svg)](https://github.com/imonoonoko/Bit-TTT-Engine/actions)
 
-[Japanese / 日本語](README_JA.md) (See separate file)
+**1.58-bit Quantization + Test-Time Training (TTT)** Implementation in Pure Rust.
+
+[日本語 / Japanese](README_JA.md)
 
 ---
 
-# 🇬🇧 English: Bit-TTT Engine
+## ✨ What is Bit-TTT?
 
-## Overview
-**Bit-TTT Engine** is a high-performance implementation of the Bit-TTT architecture. It combines **1.58-bit quantization efficiency** with **Test-Time Training (TTT)** adaptability. It uses the **Candle** framework for tensor operations and runs as a **Pure Rust** ecosystem (with optional Python integration via PyO3).
+**Bit-TTT Engine** combines two cutting-edge techniques:
+- **BitNet 1.58-bit Quantization**: Extreme compression using ternary weights {-1, 0, +1}
+- **Test-Time Training (TTT)**: Adaptive attention replacement with online learning
 
-📘 **[Read the Architecture Design](ARCHITECTURE.md)** to understand the core philosophy.
+The goal: Run **70B parameter models on 8-16GB VRAM** with efficient inference.
 
-## Features
-*   **End-to-End Rust Pipeline (NEW!)**: Complete lifecycle support (Tokenization -> Training -> Inference) purely in Rust. No Python required.
-*   **Rust-First & Python-Compatible**: Core logic in Rust for speed, exposed to Python via PyO3 if needed.
-*   **Zero-Copy Inference**: Efficient data handling between Rust and Python.
-*   **Device Support**: Supports **CPU** (AVX optimized) and **CUDA** (GPU) execution.
-*   **Pure Rust Mode**: Can be compiled as a standalone binary without Python dependencies.
-*   **Safe**: Strict adherence to Rust safety guarantees.
+## 📊 Current Status (2026-01)
 
-## Architecture: Pure Rust Ecosystem
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Core Engine (`cortex_rust`) | ✅ Complete | Candle-based neural network implementation |
+| Training Pipeline | ✅ Complete | End-to-end training in pure Rust |
+| Streaming Inference | ✅ Complete | ~1100 tokens/sec on CPU |
+| GUI Trainer | ✅ Complete | Tauri-based visual training interface |
+| Python Bindings (PyO3) | ✅ Complete | Optional Python integration |
+| Japanese Tokenizer | 🚧 Planned | Phase 14 |
+| 7B/70B Scaling | 🚧 Planned | Phase 15 |
+| WASM/Browser Support | 🚧 Planned | Phase 16 |
 
-```mermaid
-flowchart LR
-    A[Text Data] -->|"Rust Tokenizer"| B(Token IDs)
-    B -->|"train_llama (Rust)"| W[(Weights)]
-    W -->|"bit_llama (Rust)"| D[Fast Inference]
-    
-    subgraph "Core Engine (cortex_rust)"
-        direction TB
-        L[Layers]
-        M[BitLinear]
-        T[Tokenizers]
-    end
-    
-    B -.-> M
+## 🏗️ Architecture
+
+```
+Bit-TTT Engine
+├── crates/
+│   ├── rust_engine/         # Core library (cortex_rust)
+│   │   ├── layers/          # Neural network layers
+│   │   │   ├── rms_norm.rs    # RMS Normalization
+│   │   │   ├── bit_linear.rs  # 1.58-bit Linear Layer
+│   │   │   ├── swiglu.rs      # SwiGLU MLP
+│   │   │   └── ttt.rs         # TTT Layer
+│   │   ├── model/           # Model architecture
+│   │   │   ├── block.rs       # Transformer Block
+│   │   │   ├── llama.rs       # BitLlama Model
+│   │   │   └── config.rs      # Configuration
+│   │   ├── python.rs        # PyO3 bindings
+│   │   └── lib.rs           # Public API
+│   │
+│   └── bit_llama/           # CLI application
+│       ├── train/           # Training module
+│       │   ├── args.rs        # CLI arguments
+│       │   ├── checkpoint.rs  # State management
+│       │   └── training_loop.rs  # Main loop
+│       ├── gui/             # Tauri GUI
+│       └── inference.rs     # Inference engine
+│
+├── models/                  # Trained model checkpoints
+├── data/                    # Training datasets
+└── tools/                   # Utility scripts
 ```
 
-## Project Components
+## 🚀 Quick Start
 
-- **[`crates/rust_engine/`](crates/rust_engine/)**: The core implementation (`cortex_rust`).
-    - `core_engine.rs`: Candle-based neural network logic.
-    - `lib.rs`: Public API exports.
-- **[`crates/bit_llama/`](crates/bit_llama/)**: Standalone Rust binary for training/inference.
-
-## Quick Start (Pure Rust CLI) 🚀
-
-You can now train and run inference entirely without Python!
+### Prerequisites
+- Rust 1.70+
+- (Optional) CUDA 11.8+ for GPU acceleration
 
 ### 1. Build
 ```bash
-# Using provided launch script (Recommended)
+git clone https://github.com/imonoonoko/Bit-TTT-Engine.git
+cd Bit-TTT-Engine
+cargo build --release
+```
+
+### 2. Training
+```bash
+# Using launch script (Windows)
 ./launch_trainer.bat
 
-# Manual Build
-cd crates/bit_llama
-cargo build --release --features cuda
+# Manual training
+cargo run --release --bin train_llama -- \
+    --data data/TinyStories \
+    --dim 256 \
+    --layers 8 \
+    --steps 10000 \
+    --lr 3e-4
 ```
 
-### 2. Training (train_llama)
-Trains a model from scratch using the `cortex_rust` engine. Supports CLI arguments for hyperparameter tuning.
-
+### 3. Inference
 ```bash
-# Example: Train with custom Learning Rate and Step count
-cargo run --release --features cuda --bin train_llama -- --lr 0.001 --steps 10000 --data data/TinyStories/train.bin
-```
-*Outputs: `bit_llama_checkpoint.safetensors`*
-
-> [!TIP]
-> When resuming from a checkpoint, use a lower learning rate (e.g., `--lr 5e-5`) to avoid loss spikes (rebound).
-
-### 3. Inference (bit_llama)
-High-performance streaming generation.
-
-```bash
-# Using provided launch script (Recommended)
+# Using launch script (Windows)
 ./launch_chat.bat
 
-# Manual Run
-# Run with a model directory containing config.json, tokenizer.json, model.safetensors
-# Ensure you are in crates/bit_llama or use absolute paths for model
-../../target/release/bit_llama --model ../../models/dummy --prompt "Hello Rust AI" --temp 0.8 --max-tokens 100
+# Manual inference
+cargo run --release --bin bit_llama -- \
+    --model models/my_model \
+    --prompt "Hello Bit-TTT!" \
+    --max-tokens 100 \
+    --temp 0.8
 ```
-*Performance: ~1100 tokens/sec (on CPU with dummy model)*
 
-## Quick Start (Python)
+## 📖 Documentation
 
-### 1. Build & Install
-Use `maturin` to build the Python wheel.
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System design philosophy |
+| [ROADMAP.md](ROADMAP.md) | Future development plans |
+| [docs/SPECIFICATION.md](docs/SPECIFICATION.md) | Technical specification |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Contribution guide |
+
+## 🛠️ Development Commands
 
 ```bash
+# Run all tests
+cargo test --workspace
+
+# Check compilation
+cargo check --workspace
+
+# Format code
+cargo fmt --all
+
+# Run linter
+cargo clippy --workspace
+```
+
+## 🐍 Python Integration (Optional)
+
 ```bash
 cd crates/rust_engine
+pip install maturin
 maturin develop --release
 ```
 
-### 2. Usage
 ```python
 import cortex_rust
 
-# Configuration
 config = cortex_rust.BitLlamaConfig(
-    vocab_size=50257,
+    vocab_size=16384,
     hidden_dim=256,
-    num_layers=4,
-    inner_lr=0.01
+    num_layers=8,
+    inner_lr=0.1
 )
 
-# Load Model (Device: "cpu" or "cuda")
-model = cortex_rust.BitLlama(config, "path/to/model.safetensors", device="cuda")
-
-# Inference (Tokens)
-tokens = [1, 50, 100]
-logits = model.forward(tokens)
-print(logits)
+model = cortex_rust.BitLlama(config, "model.safetensors", device="cuda")
+logits = model.forward(token_id=42)
 ```
 
-## Advanced Build Options
+## 💖 Support
 
-### Pure Rust Binary (No Python)
-If you want to build a standalone Rust binary without linking to Python (e.g., for embedded deployment):
-
-```bash
-cargo build --release --no-default-features
-```
-(This disables the `python` feature flag in `Cargo.toml`).
-
-### Device Selection
-In `PyBitLlama`, you can specify the device:
-- `device="cpu"` (Default if omitted)
-- `device="cuda"` (Requires CUDA feature enabled and GPU)
-
-## Support
-
-**Orynth CA**: `13ui3nmE7smmK3Pk8wyKb7RE6wHyMJCcWgCeMRRdoory`
+**Solana Wallet**: `13ui3nmE7smmK3Pk8wyKb7RE6wHyMJCcWgCeMRRdoory`
 
 ---
-*Created by Project Bit-TTT.*
+
+*Created by Project Bit-TTT • MIT License*
