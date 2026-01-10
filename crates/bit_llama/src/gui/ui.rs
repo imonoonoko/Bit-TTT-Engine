@@ -258,6 +258,10 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                                 .speed(32),
                         );
                         ui.end_row();
+                        ui.end_row();
+                        ui.label("Heads:");
+                        ui.add(egui::DragValue::new(&mut project.config.n_heads));
+                        ui.end_row();
                         ui.label("Vocab Size:");
                         ui.add(egui::DragValue::new(&mut project.config.vocab_size));
                         ui.end_row();
@@ -277,6 +281,15 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                         ui.end_row();
                         ui.label("Learning Rate:");
                         ui.add(egui::DragValue::new(&mut project.config.lr).speed(0.0001));
+                        ui.end_row();
+                        ui.label("Min LR:");
+                        ui.add(egui::DragValue::new(&mut project.config.min_lr).speed(0.0001));
+                        ui.end_row();
+                        ui.label("Warmup Steps:");
+                        ui.add(egui::DragValue::new(&mut project.config.warmup_steps));
+                        ui.end_row();
+                        ui.label("Save Interval:");
+                        ui.add(egui::DragValue::new(&mut project.config.save_interval));
                         ui.end_row();
                     });
 

@@ -7,6 +7,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -23,7 +24,12 @@ pub struct ProjectState {
     // Processes
     pub active_process: Option<Child>,
     pub is_running: bool,
-    pub logs: Arc<Mutex<VecDeque<String>>>,
+
+    // Logging (Channel-based)
+    pub logs: VecDeque<String>,
+    pub log_tx: Sender<String>,
+    pub log_rx: Receiver<String>,
+
     pub status_message: String,
     // Async
     pub download_progress: Arc<Mutex<f32>>,
@@ -32,6 +38,8 @@ pub struct ProjectState {
 
 impl ProjectState {
     pub fn new(path: PathBuf, config: ProjectConfig) -> Self {
+        let (tx, rx) = channel();
+
         let mut state = Self {
             path,
             config,
@@ -40,7 +48,9 @@ impl ProjectState {
             has_dataset: false,
             active_process: None,
             is_running: false,
-            logs: Arc::new(Mutex::new(VecDeque::new())),
+            logs: VecDeque::new(),
+            log_tx: tx,
+            log_rx: rx,
             status_message: "Ready".to_string(),
             download_progress: Arc::new(Mutex::new(0.0)),
             download_status: Arc::new(Mutex::new(String::new())),
@@ -67,16 +77,23 @@ impl ProjectState {
     }
 
     pub fn log(&self, msg: &str) {
-        let mut logs = self.logs.lock().unwrap();
-        logs.push_back(msg.to_string());
-        if logs.len() > 1000 {
-            logs.pop_front();
+        // Send to channel (non-blocking)
+        let _ = self.log_tx.send(msg.to_string());
+    }
+
+    /// Drains the channel and updates the local log buffer.
+    /// Should be called from the main UI thread.
+    pub fn drain_logs(&mut self) {
+        while let Ok(msg) = self.log_rx.try_recv() {
+            self.logs.push_back(msg);
+            if self.logs.len() > 1000 {
+                self.logs.pop_front();
+            }
         }
     }
 
     pub fn get_logs(&self) -> String {
-        let logs = self.logs.lock().unwrap();
-        logs.iter().cloned().collect::<Vec<_>>().join("\n")
+        self.logs.iter().cloned().collect::<Vec<_>>().join("\n")
     }
 
     pub fn run_command(&mut self, cmd: &str, args: &[&str]) {
@@ -94,18 +111,15 @@ impl ProjectState {
             Ok(mut child) => {
                 let stdout = child.stdout.take().unwrap();
                 let stderr = child.stderr.take().unwrap();
-                let logs1 = self.logs.clone();
-                let logs2 = self.logs.clone();
+
+                let tx1 = self.log_tx.clone();
+                let tx2 = self.log_tx.clone();
 
                 thread::spawn(move || {
                     let reader = BufReader::new(stdout);
                     for line in reader.lines() {
                         if let Ok(l) = line {
-                            let mut logs = logs1.lock().unwrap();
-                            logs.push_back(l);
-                            if logs.len() > 1000 {
-                                logs.pop_front();
-                            }
+                            let _ = tx1.send(l);
                         }
                     }
                 });
@@ -114,11 +128,7 @@ impl ProjectState {
                     let reader = BufReader::new(stderr);
                     for line in reader.lines() {
                         if let Ok(l) = line {
-                            let mut logs = logs2.lock().unwrap();
-                            logs.push_back(l);
-                            if logs.len() > 1000 {
-                                logs.pop_front();
-                            }
+                            let _ = tx2.send(l);
                         }
                     }
                 });

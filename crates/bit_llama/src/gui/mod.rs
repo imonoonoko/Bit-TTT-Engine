@@ -119,6 +119,9 @@ impl eframe::App for BitStudioApp {
 
         // Poll process status
         if let Some(project) = &mut self.current_project {
+            // Drain background logs
+            project.drain_logs();
+
             if project.is_running {
                 if let Some(child) = &mut project.active_process {
                     if let Ok(Some(_status)) = child.try_wait() {
@@ -258,6 +261,8 @@ fn setup_custom_fonts(ctx: &egui::Context) {
         vec![
             "C:/Windows/Fonts/YuGothB.ttc",
             "C:/Windows/Fonts/msgothic.ttc",
+            "C:/Windows/Fonts/meiryo.ttc",
+            "C:/Windows/Fonts/YuGothic.ttf",
         ]
     } else {
         vec![]
