@@ -86,11 +86,10 @@ bit_llama/src/train/
 
 ### タスク一覧
 
-- [ ] `legacy/` モジュールの使用箇所確認
-- [ ] 使用箇所がなければ `legacy/` 削除
-- [ ] `#[deprecated]` アノテーションの整理
-- [ ] `Cargo.toml` から不要な依存削除
-- [ ] ドキュメント更新 (`CODE_ATLAS.md` など)
+- [x] `legacy/` モジュールの使用箇所確認
+- [x] 使用箇所がなければ `legacy/` 削除
+- [x] `lib.rs` から deprecated エクスポート削除
+- [x] `cargo check --workspace` 通過確認
 
 ---
 
