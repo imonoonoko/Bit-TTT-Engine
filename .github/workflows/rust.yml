@@ -23,6 +23,11 @@ jobs:
           override: true
           components: rustfmt, clippy
 
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev libgtk-3-dev
+
       - name: Build Engine
         run: cargo build --verbose
         working-directory: ./crates/rust_engine

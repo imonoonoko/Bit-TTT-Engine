@@ -846,14 +846,12 @@ impl Llama {
             .map_err(|e| anyhow::anyhow!(e))?;
 
         // Output first token if not empty
-        if !prev_decoded.is_empty() {
-            if !callback(&prev_decoded)? {
-                let full_text = self
-                    .tokenizer
-                    .decode(&all_tokens, true)
-                    .map_err(|e| anyhow::anyhow!(e))?;
-                return Ok(full_text);
-            }
+        if !prev_decoded.is_empty() && !callback(&prev_decoded)? {
+            let full_text = self
+                .tokenizer
+                .decode(&all_tokens, true)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            return Ok(full_text);
         }
 
         for _ in 0..(max_tokens - 1) {
@@ -909,10 +907,8 @@ impl Llama {
                 delta.to_string()
             };
 
-            if !processed_delta.is_empty() {
-                if !callback(&processed_delta)? {
-                    break;
-                }
+            if !processed_delta.is_empty() && !callback(&processed_delta)? {
+                break;
             }
             prev_decoded = current_decoded;
         }

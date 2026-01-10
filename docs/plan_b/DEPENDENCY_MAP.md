@@ -1,67 +1,37 @@
-# Dependency Map: Phase 14 & Improvements
-
-## 1. System Structure Overview
+# Dependency Map: GUI Enhancement
 
 ```mermaid
 graph TD
-    subgraph "External Ecosystem"
-        HF[HuggingFace Hub]
-        JapaneseWiki[Wiki40b-ja / Izumi-lab Dataset]
-        JP_Tokenizer[Japanese Tokenizer (Llama-3/ELYZA)]
+    User([User]) -->|Interacts| UI[GUI Layer (ui.rs)]
+    UI -->|Updates| App[BitStudioApp (mod.rs)]
+    
+    subgraph State Management
+        App -->|Owns| PState[ProjectState (state.rs)]
+        App -->|Owns| Config[ProjectConfig (config.rs)]
     end
 
-    subgraph "Bit-TTT Workspace"
-        subgraph "crates/rust_engine (Core)"
-            TTTLayer[TTTLayer (Logic)]
-            BitLinear[BitLinear (Logic)]
-            FFI[c_api.rs (Unsafe Boundary)]
-        end
-
-        subgraph "crates/bit_llama (App)"
-            Trainer[bin/train_llama]
-            Inference[bin/chat]
-            Evaluator[bin/evaluate (NEW)]
-        end
-
-        subgraph "Testing & QA"
-            Fuzzer[cargo-fuzz Targets (NEW)]
-            Benchmarks[Criterion Benches]
-        end
+    subgraph Process Control
+        PState -->|Spawns| Child[Child Process (Command)]
+        Child -->|StdOut/Err| Logs[Log Buffer]
+        PState -->|Reads| Logs
+        PState -->|Polls| Child
     end
 
-    %% Dependencies
-    Trainer -->|Uses| TTTLayer
-    Trainer -->|Uses| JP_Tokenizer
-    Trainer -->|Streams| JapaneseWiki
-    
-    Inference -->|Uses| TTTLayer
-    Inference -->|Uses| JP_Tokenizer
-    
-    Evaluator -->|Calc PPL| TTTLayer
-    Evaluator -->|Uses| JapaneseWiki
+    subgraph File System
+        App -->|Scans| Projects[projects/ Dir]
+        PState -->|Writes| JSON[project.json]
+        Child -->|Reads| Data[data/ Dir]
+        Child -->|Writes| Models[models/ Dir]
+    end
 
-    Fuzzer -->|Fuzzes| TTTLayer
-    Fuzzer -->|Fuzzes| BitLinear
-    Fuzzer -->|Verifies| FFI
+    %% Risks
+    style Child fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
+    note[Risk: Process Hang freezing UI] -.-> Child
+    note2[Risk: Large Log Buffer memory] -.-> Logs
 ```
 
-## 2. Risk Assessment (リスク評価)
-
-### 2.1 Critical Dependencies
-*   **Tokenizer Compatibility**:
-    *   `tokenizers` クレートが日本語モデル（SentencePiece / BPE）を正しくロードできるか。
-    *   **Risk**: 一部の独自形式Tokenizerがロード不可の場合、変換スクリプトが必要。
-    
-*   **FFI Stability (c_api.rs)**:
-    *   `rust_engine` の内部構造（レイアウト）変更が、C-APIのポインタ参照先に影響しないか。
-    *   **Risk**: 構造体定義の変更時、FFI側を更新し忘れると Segfault (Undefined Behavior)。
-
-### 2.2 Side Effects
-*   **Memory Usage (Evaluation)**:
-    *   評価（Evaluation）プロセスが学習プロセスとメモリを共食いしないか。
-    *   **Mitigation**: 評価はチェックポイント保存後に別プロセス、あるいは学習を一時停止して実行。
-
-## 3. Impact Scope
-*   **High Impact**: `crates/bit_llama/src/main.rs`, `crates/rust_engine/src/lib.rs`
-*   **Medium Impact**: `crates/bit_llama/Cargo.toml` (Deps追加)
-*   **Low Impact**: `README.md` (使い方の更新)
+## Risk Assessment
+1.  **Process Blocking**: `try_wait()` is non-blocking, but if we read large chunks of logs synchronously in the UI loop, it might stutter.
+    *   *Mitigation*: Use `std::sync::mpsc` or `crossbeam` to stream logs from a background thread to UI thread.
+2.  **State Desync**: If the user edits `project.json` externally, the GUI might not reflect it until reload.
+3.  **Config Compatibility**: Adding new fields to `ProjectConfig` necessitates backward compatibility for existing projects.
