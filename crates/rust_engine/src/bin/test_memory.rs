@@ -21,10 +21,10 @@ fn main() -> anyhow::Result<()> {
 
     // Initialize with small random-like values using deterministic pattern
     let down_data: Vec<f32> = (0..(d_small * dim))
-        .map(|i| ((i as f32).sin() * 0.1))
+        .map(|i| (i as f32).sin() * 0.1)
         .collect();
     let up_data: Vec<f32> = (0..(dim * d_small))
-        .map(|i| ((i as f32).cos() * 0.1))
+        .map(|i| (i as f32).cos() * 0.1)
         .collect();
 
     tensors.insert(
@@ -40,9 +40,9 @@ fn main() -> anyhow::Result<()> {
     let layer = TTTLayer::load(dim, inner_lr, vb)?;
 
     // Create test patterns
-    let pattern_a: Vec<f32> = (0..dim).map(|i| (i as f32 / dim as f32)).collect();
+    let pattern_a: Vec<f32> = (0..dim).map(|i| i as f32 / dim as f32).collect();
     let pattern_b: Vec<f32> = (0..dim)
-        .map(|i| ((i as f32 / dim as f32) * 2.0 - 1.0))
+        .map(|i| (i as f32 / dim as f32) * 2.0 - 1.0)
         .collect();
 
     let x_a = Tensor::from_vec(pattern_a.clone(), (1, dim), &device)?;
