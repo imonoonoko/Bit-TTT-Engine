@@ -1,6 +1,7 @@
 //! UI Rendering - Workspace content rendering with i18n support
 
 use eframe::egui;
+use std::env;
 use std::process::Command;
 
 use crate::gui::i18n::{t, t_tooltip, Language};
@@ -80,14 +81,11 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                             .to_string_lossy()
                             .into_owned();
 
+                        let exe = env::current_exe().unwrap_or_default();
+                        let exe_str = exe.to_string_lossy().to_string();
                         project.run_command(
-                            "cargo",
+                            &exe_str,
                             &[
-                                "run",
-                                "--release",
-                                "-p",
-                                "bit_llama",
-                                "--",
                                 "vocab",
                                 "--input",
                                 &corpus_path,
@@ -131,14 +129,11 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                             .into_owned();
                         let prefix = project.path.join("data/").to_string_lossy().into_owned();
 
+                        let exe = env::current_exe().unwrap_or_default();
+                        let exe_str = exe.to_string_lossy().to_string();
                         project.run_command(
-                            "cargo",
+                            &exe_str,
                             &[
-                                "run",
-                                "--release",
-                                "-p",
-                                "bit_llama",
-                                "--",
                                 "data",
                                 "--input",
                                 &corpus_path,
@@ -198,16 +193,11 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                                 let warmup = project.config.warmup_steps.to_string();
                                 let save_int = project.config.save_interval.to_string();
 
+                                let exe = env::current_exe().unwrap_or_default();
+                                let exe_str = exe.to_string_lossy().to_string();
                                 project.run_command(
-                                    "cargo",
+                                    &exe_str,
                                     &[
-                                        "run",
-                                        "--release",
-                                        "--features",
-                                        "cuda",
-                                        "-p",
-                                        "bit_llama",
-                                        "--",
                                         "train",
                                         "--data",
                                         &data_dir,
