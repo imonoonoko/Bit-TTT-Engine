@@ -1,4 +1,6 @@
 pub mod graph;
+pub mod i18n;
+pub mod presets;
 pub mod ui;
 
 use eframe::egui;
@@ -7,6 +9,8 @@ use std::path::Path;
 
 use crate::config::ProjectConfig;
 use crate::gui::graph::TrainingGraph;
+use crate::gui::i18n::Language;
+use crate::gui::presets::ModelPreset;
 use crate::state::ProjectState;
 
 const PROJECTS_DIR: &str = "projects";
@@ -25,9 +29,13 @@ pub struct BitStudioApp {
     pub tab: AppTab,
     pub runtime: tokio::runtime::Runtime,
 
+    // i18n
+    pub language: Language,
+
     // UI State
     pub new_project_name: String,
     pub current_project: Option<ProjectState>,
+    pub current_preset: ModelPreset,
 
     // Project Selection
     pub available_projects: Vec<String>,
@@ -50,8 +58,10 @@ impl Default for BitStudioApp {
         Self {
             tab: AppTab::Home,
             runtime,
+            language: Language::default(),
             new_project_name: "MyModel".to_string(),
             current_project: None,
+            current_preset: ModelPreset::default(),
             available_projects: Self::scan_projects(),
             training_graph: TrainingGraph::new(),
         }
@@ -148,16 +158,22 @@ impl eframe::App for BitStudioApp {
             .resizable(true)
             .default_width(220.0)
             .show(ctx, |ui| {
+                // Language Toggle at top
+                ui.horizontal(|ui| {
+                    if ui.button(self.language.display_name()).clicked() {
+                        self.language = self.language.toggle();
+                    }
+                });
                 ui.add_space(5.0);
-                ui.heading("📂 Projects");
+                ui.heading(i18n::t(self.language, "existing_projects"));
                 ui.separator();
 
-                ui.collapsing("New Project", |ui| {
+                ui.collapsing(i18n::t(self.language, "new_project"), |ui| {
                     ui.horizontal(|ui| {
-                        ui.label("Name:");
+                        ui.label(i18n::t(self.language, "project_name"));
                         ui.text_edit_singleline(&mut self.new_project_name);
                     });
-                    if ui.button("✨ Create").clicked() {
+                    if ui.button(i18n::t(self.language, "create_btn")).clicked() {
                         self.create_project();
                     }
                 });
