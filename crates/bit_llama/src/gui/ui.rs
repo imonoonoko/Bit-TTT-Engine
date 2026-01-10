@@ -1,47 +1,54 @@
+//! UI Rendering - Workspace content rendering with i18n support
+
 use eframe::egui;
 use std::process::Command;
 
+use crate::gui::i18n::{t, t_tooltip, Language};
+use crate::gui::presets::ModelPreset;
 use crate::gui::AppTab;
 use crate::gui::BitStudioApp;
 
 pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
+    let lang = app.language;
     let project = app.current_project.as_mut().unwrap();
 
     egui::ScrollArea::vertical().show(ui, |ui| {
         match app.tab {
             AppTab::Home => { /* Handled by SidePanel */ }
             AppTab::DataPrep => {
-                ui.heading("📝 Step 1: Data Preparation");
-                ui.label("Import text files to create a training corpus.");
+                ui.heading(t(lang, "step1_title"));
+                ui.label(t(lang, "step1_desc"));
                 ui.add_space(10.0);
 
                 ui.group(|ui| {
-                    ui.heading("1. Collect Raw Material");
+                    ui.heading(t(lang, "collect_raw"));
                     ui.horizontal(|ui| {
-                        if ui.button("📂 Open raw/ folder").clicked() {
+                        if ui.button(t(lang, "open_raw_folder")).clicked() {
                             let _ = Command::new("explorer")
                                 .arg(project.path.join("raw"))
                                 .spawn();
                         }
-                        ui.label("← Place .txt files here");
+                        ui.label(t(lang, "place_txt_here"));
                     });
                 });
 
                 ui.add_space(10.0);
 
                 ui.group(|ui| {
-                    ui.heading("2. Concatenate (Create Corpus)");
-                    if ui.button("🔄 Concatenate to corpus.txt").clicked() {
+                    ui.heading(t(lang, "concat_corpus"));
+                    if ui.button(t(lang, "concat_btn")).clicked() {
                         project.concat_txt_files();
                     }
 
                     if project.has_corpus {
                         ui.label(
-                            egui::RichText::new("✅ corpus.txt ready").color(egui::Color32::GREEN),
+                            egui::RichText::new(t(lang, "corpus_ready"))
+                                .color(egui::Color32::GREEN),
                         );
                     } else {
                         ui.label(
-                            egui::RichText::new("❌ Missing corpus.txt").color(egui::Color32::RED),
+                            egui::RichText::new(t(lang, "corpus_missing"))
+                                .color(egui::Color32::RED),
                         );
                     }
                 });
@@ -49,17 +56,18 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                 ui.add_space(10.0);
 
                 ui.group(|ui| {
-                    ui.heading("3. Train Tokenizer");
+                    ui.heading(t(lang, "train_tokenizer"));
                     ui.horizontal(|ui| {
-                        ui.label("Vocab Size:");
+                        ui.label(t(lang, "vocab_size"));
                         ui.add(
                             egui::DragValue::new(&mut project.config.vocab_size)
                                 .clamp_range(100..=65535),
-                        );
+                        )
+                        .on_hover_text(t_tooltip(lang, "vocab_size"));
                     });
                     ui.add_space(5.0);
 
-                    if ui.button("▶ Start Tokenizer Training").clicked() {
+                    if ui.button(t(lang, "start_tokenizer")).clicked() {
                         let corpus_path = project
                             .path
                             .join("data/corpus.txt")
@@ -92,24 +100,24 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
 
                     if project.has_tokenizer {
                         ui.label(
-                            egui::RichText::new("✅ tokenizer.json ready")
+                            egui::RichText::new(t(lang, "tokenizer_ready"))
                                 .color(egui::Color32::GREEN),
                         );
                     }
                 });
             }
             AppTab::Preprocessing => {
-                ui.heading("🔢 Step 2: Preprocessing");
-                ui.label("Convert text to binary ID sequence.");
+                ui.heading(t(lang, "step2_title"));
+                ui.label(t(lang, "step2_desc"));
                 ui.add_space(10.0);
 
                 if !project.has_corpus || !project.has_tokenizer {
-                    ui.colored_label(egui::Color32::RED, "⚠️ Error: Step 1 not complete.");
+                    ui.colored_label(egui::Color32::RED, t(lang, "step1_incomplete"));
                 }
 
                 ui.group(|ui| {
-                    ui.heading("Dataset Conversion");
-                    if ui.button("▶ Start Conversion (Parallel)").clicked() {
+                    ui.heading(t(lang, "dataset_conversion"));
+                    if ui.button(t(lang, "start_conversion")).clicked() {
                         let corpus_path = project
                             .path
                             .join("data/corpus.txt")
@@ -142,25 +150,26 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
 
                     if project.has_dataset {
                         ui.label(
-                            egui::RichText::new("✅ train.u32 ready").color(egui::Color32::GREEN),
+                            egui::RichText::new(t(lang, "dataset_ready"))
+                                .color(egui::Color32::GREEN),
                         );
                     }
                 });
             }
             AppTab::Training => {
-                ui.heading("🧠 Step 3: Training");
+                ui.heading(t(lang, "step3_title"));
                 if !project.has_dataset {
-                    ui.colored_label(egui::Color32::RED, "⚠️ Error: Step 2 not complete.");
+                    ui.colored_label(egui::Color32::RED, t(lang, "step2_incomplete"));
                 }
 
                 ui.group(|ui| {
-                    ui.heading("Current Config");
+                    ui.heading(t(lang, "current_config"));
                     ui.label(format!(
                         "Dim: {} | Layers: {} | Context: {}",
                         project.config.model_dim, project.config.layers, project.config.context_len
                     ));
                     ui.add_space(5.0);
-                    if ui.button("⚙ Change in Settings").clicked() {
+                    if ui.button(t(lang, "change_in_settings")).clicked() {
                         app.tab = AppTab::Settings;
                     }
                 });
@@ -168,16 +177,15 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                 ui.add_space(10.0);
 
                 ui.group(|ui| {
-                    ui.heading("Controls");
+                    ui.heading(t(lang, "controls"));
                     ui.horizontal(|ui| {
                         if !project.is_running {
-                            if ui.button("▶ START Training").clicked() {
+                            if ui.button(t(lang, "start_training")).clicked() {
                                 let data_dir =
                                     project.path.join("data").to_string_lossy().into_owned();
                                 let output_dir =
                                     project.path.join("models").to_string_lossy().into_owned();
 
-                                // Args
                                 let steps = project.config.steps.to_string();
                                 let lr = project.config.lr.to_string();
                                 let dim = project.config.model_dim.to_string();
@@ -199,8 +207,7 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                                         "train_llama",
                                         "--",
                                         "--data",
-                                        &data_dir, // Note: Script used --data file, implementation here uses dir? Check train_llama logic.
-                                        // Actually launcher.rs lines 725 passed --data &data_dir.
+                                        &data_dir,
                                         "--output-dir",
                                         &output_dir,
                                         "--steps",
@@ -225,7 +232,7 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                                 );
                             }
                         } else {
-                            if ui.button("⏹ STOP").clicked() {
+                            if ui.button(t(lang, "stop_training")).clicked() {
                                 project.stop_process();
                             }
                             ui.spinner();
@@ -238,9 +245,9 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
 
                 // Loss Visualization Graph
                 ui.group(|ui| {
-                    ui.heading("📊 Training Progress");
+                    ui.heading(t(lang, "training_progress"));
                     if app.training_graph.data.is_empty() {
-                        ui.label("No training data yet. Start training to see the loss curve.");
+                        ui.label(t(lang, "no_training_data"));
                     } else {
                         ui.label(format!(
                             "Step: {} | Latest Loss: {:.4}",
@@ -250,78 +257,175 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                         app.training_graph.ui(ui);
                     }
                     ui.horizontal(|ui| {
-                        if ui.button("🗑 Clear Graph").clicked() {
+                        if ui.button(t(lang, "clear_graph")).clicked() {
                             app.training_graph.clear();
                         }
                     });
                 });
             }
             AppTab::Settings => {
-                ui.heading("⚙ Settings");
+                ui.heading(t(lang, "settings_title"));
+
+                // Preset Selector
                 ui.group(|ui| {
-                    ui.heading("Architecture");
+                    ui.heading(t(lang, "preset"));
+                    ui.horizontal(|ui| {
+                        for preset in ModelPreset::all() {
+                            let is_selected = *preset == app.current_preset;
+                            let text = preset.display_name(lang == Language::Japanese);
+                            if ui.selectable_label(is_selected, text).clicked() {
+                                app.current_preset = *preset;
+                                preset.apply(&mut project.config);
+                            }
+                        }
+                    });
+                    ui.label(format!("VRAM: {}", app.current_preset.vram_estimate()));
+                });
+
+                ui.add_space(10.0);
+
+                ui.group(|ui| {
+                    ui.heading(t(lang, "architecture"));
                     egui::Grid::new("arch_grid").striped(true).show(ui, |ui| {
-                        ui.label("Model Dim:");
-                        ui.add(
-                            egui::DragValue::new(&mut project.config.model_dim)
-                                .clamp_range(64..=4096)
-                                .speed(64),
-                        );
+                        ui.label(t(lang, "model_dim"));
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut project.config.model_dim)
+                                    .clamp_range(64..=4096)
+                                    .speed(64),
+                            )
+                            .on_hover_text(t_tooltip(lang, "model_dim"))
+                            .changed()
+                        {
+                            app.current_preset = ModelPreset::Custom;
+                        }
                         ui.end_row();
-                        ui.label("Layers:");
-                        ui.add(
-                            egui::DragValue::new(&mut project.config.layers).clamp_range(1..=128),
-                        );
+
+                        ui.label(t(lang, "layers"));
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut project.config.layers)
+                                    .clamp_range(1..=128),
+                            )
+                            .on_hover_text(t_tooltip(lang, "layers"))
+                            .changed()
+                        {
+                            app.current_preset = ModelPreset::Custom;
+                        }
                         ui.end_row();
-                        ui.label("Context Len:");
-                        ui.add(
-                            egui::DragValue::new(&mut project.config.context_len)
-                                .clamp_range(32..=8192)
-                                .speed(32),
-                        );
+
+                        ui.label(t(lang, "context_len"));
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut project.config.context_len)
+                                    .clamp_range(32..=8192)
+                                    .speed(32),
+                            )
+                            .on_hover_text(t_tooltip(lang, "context_len"))
+                            .changed()
+                        {
+                            app.current_preset = ModelPreset::Custom;
+                        }
                         ui.end_row();
+
+                        ui.label(t(lang, "heads"));
+                        if ui
+                            .add(egui::DragValue::new(&mut project.config.n_heads))
+                            .on_hover_text(t_tooltip(lang, "heads"))
+                            .changed()
+                        {
+                            app.current_preset = ModelPreset::Custom;
+                        }
                         ui.end_row();
-                        ui.label("Heads:");
-                        ui.add(egui::DragValue::new(&mut project.config.n_heads));
-                        ui.end_row();
-                        ui.label("Vocab Size:");
-                        ui.add(egui::DragValue::new(&mut project.config.vocab_size));
+
+                        ui.label(t(lang, "vocab_size"));
+                        if ui
+                            .add(egui::DragValue::new(&mut project.config.vocab_size))
+                            .on_hover_text(t_tooltip(lang, "vocab_size"))
+                            .changed()
+                        {
+                            app.current_preset = ModelPreset::Custom;
+                        }
                         ui.end_row();
                     });
 
                     ui.add_space(10.0);
-                    ui.heading("Hyperparameters");
+                    ui.heading(t(lang, "hyperparameters"));
                     egui::Grid::new("hyper_grid").striped(true).show(ui, |ui| {
-                        ui.label("Batch Size:");
-                        ui.add(
-                            egui::DragValue::new(&mut project.config.batch_size)
-                                .clamp_range(1..=512),
-                        );
+                        ui.label(t(lang, "batch_size"));
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut project.config.batch_size)
+                                    .clamp_range(1..=512),
+                            )
+                            .on_hover_text(t_tooltip(lang, "batch_size"))
+                            .changed()
+                        {
+                            app.current_preset = ModelPreset::Custom;
+                        }
                         ui.end_row();
-                        ui.label("Steps:");
-                        ui.add(egui::DragValue::new(&mut project.config.steps));
+
+                        ui.label(t(lang, "steps"));
+                        if ui
+                            .add(egui::DragValue::new(&mut project.config.steps))
+                            .on_hover_text(t_tooltip(lang, "steps"))
+                            .changed()
+                        {
+                            app.current_preset = ModelPreset::Custom;
+                        }
                         ui.end_row();
-                        ui.label("Learning Rate:");
-                        ui.add(egui::DragValue::new(&mut project.config.lr).speed(0.0001));
+
+                        ui.label(t(lang, "learning_rate"));
+                        if ui
+                            .add(egui::DragValue::new(&mut project.config.lr).speed(0.0001))
+                            .on_hover_text(t_tooltip(lang, "learning_rate"))
+                            .changed()
+                        {
+                            app.current_preset = ModelPreset::Custom;
+                        }
                         ui.end_row();
-                        ui.label("Min LR:");
-                        ui.add(egui::DragValue::new(&mut project.config.min_lr).speed(0.0001));
+
+                        ui.label(t(lang, "min_lr"));
+                        if ui
+                            .add(egui::DragValue::new(&mut project.config.min_lr).speed(0.0001))
+                            .on_hover_text(t_tooltip(lang, "min_lr"))
+                            .changed()
+                        {
+                            app.current_preset = ModelPreset::Custom;
+                        }
                         ui.end_row();
-                        ui.label("Warmup Steps:");
-                        ui.add(egui::DragValue::new(&mut project.config.warmup_steps));
+
+                        ui.label(t(lang, "warmup_steps"));
+                        if ui
+                            .add(egui::DragValue::new(&mut project.config.warmup_steps))
+                            .on_hover_text(t_tooltip(lang, "warmup_steps"))
+                            .changed()
+                        {
+                            app.current_preset = ModelPreset::Custom;
+                        }
                         ui.end_row();
-                        ui.label("Save Interval:");
-                        ui.add(egui::DragValue::new(&mut project.config.save_interval));
+
+                        ui.label(t(lang, "save_interval"));
+                        if ui
+                            .add(egui::DragValue::new(&mut project.config.save_interval))
+                            .on_hover_text(t_tooltip(lang, "save_interval"))
+                            .changed()
+                        {
+                            app.current_preset = ModelPreset::Custom;
+                        }
                         ui.end_row();
                     });
 
                     ui.add_space(10.0);
                     let (vram_gb, msg, color) = project.config.estimate_vram_usage();
-                    ui.colored_label(color, format!("VRAM Check: {:.2} GB - {}", vram_gb, msg));
+                    ui.colored_label(
+                        color,
+                        format!("{} {:.2} GB - {}", t(lang, "vram_check"), vram_gb, msg),
+                    );
                 });
 
                 ui.add_space(10.0);
-                if ui.button("💾 Save Config").clicked() {
+                if ui.button(t(lang, "save_config")).clicked() {
                     project.save_config();
                 }
             }
