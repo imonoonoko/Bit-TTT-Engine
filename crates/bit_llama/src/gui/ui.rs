@@ -233,6 +233,28 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                         }
                     });
                 });
+
+                ui.add_space(10.0);
+
+                // Loss Visualization Graph
+                ui.group(|ui| {
+                    ui.heading("📊 Training Progress");
+                    if app.training_graph.data.is_empty() {
+                        ui.label("No training data yet. Start training to see the loss curve.");
+                    } else {
+                        ui.label(format!(
+                            "Step: {} | Latest Loss: {:.4}",
+                            app.training_graph.current_step,
+                            app.training_graph.latest_loss().unwrap_or(0.0)
+                        ));
+                        app.training_graph.ui(ui);
+                    }
+                    ui.horizontal(|ui| {
+                        if ui.button("🗑 Clear Graph").clicked() {
+                            app.training_graph.clear();
+                        }
+                    });
+                });
             }
             AppTab::Settings => {
                 ui.heading("⚙ Settings");

@@ -1,3 +1,4 @@
+pub mod graph;
 pub mod ui;
 
 use eframe::egui;
@@ -5,6 +6,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::config::ProjectConfig;
+use crate::gui::graph::TrainingGraph;
 use crate::state::ProjectState;
 
 const PROJECTS_DIR: &str = "projects";
@@ -29,6 +31,9 @@ pub struct BitStudioApp {
 
     // Project Selection
     pub available_projects: Vec<String>,
+
+    // Training Visualization
+    pub training_graph: TrainingGraph,
 }
 
 impl Default for BitStudioApp {
@@ -48,6 +53,7 @@ impl Default for BitStudioApp {
             new_project_name: "MyModel".to_string(),
             current_project: None,
             available_projects: Self::scan_projects(),
+            training_graph: TrainingGraph::new(),
         }
     }
 }
@@ -117,10 +123,13 @@ impl eframe::App for BitStudioApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.set_pixels_per_point(1.2);
 
-        // Poll process status
+        // Poll process status and update graph
         if let Some(project) = &mut self.current_project {
-            // Drain background logs
-            project.drain_logs();
+            // Drain background logs and extract training data
+            let data_points = project.drain_logs_with_parse();
+            for (step, loss) in data_points {
+                self.training_graph.add_point(step, loss);
+            }
 
             if project.is_running {
                 if let Some(child) = &mut project.active_process {

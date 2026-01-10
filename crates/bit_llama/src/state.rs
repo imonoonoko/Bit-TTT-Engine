@@ -92,6 +92,64 @@ impl ProjectState {
         }
     }
 
+    /// Drains logs and extracts (step, loss) pairs for graphing.
+    /// Returns a vector of extracted data points.
+    pub fn drain_logs_with_parse(&mut self) -> Vec<(f64, f64)> {
+        let mut data_points = Vec::new();
+
+        while let Ok(msg) = self.log_rx.try_recv() {
+            // Try to extract step and loss from log line
+            if let Some((step, loss)) = Self::parse_training_log(&msg) {
+                data_points.push((step, loss));
+            }
+
+            self.logs.push_back(msg);
+            if self.logs.len() > 1000 {
+                self.logs.pop_front();
+            }
+        }
+
+        data_points
+    }
+
+    /// Parse a training log line to extract step and loss.
+    fn parse_training_log(line: &str) -> Option<(f64, f64)> {
+        let line_lower = line.to_lowercase();
+
+        // Try to find step number
+        let step = if let Some(pos) = line_lower.find("step") {
+            let after_step = &line[pos + 4..];
+            after_step
+                .chars()
+                .skip_while(|c| !c.is_ascii_digit())
+                .take_while(|c| c.is_ascii_digit())
+                .collect::<String>()
+                .parse::<f64>()
+                .ok()
+        } else {
+            None
+        };
+
+        // Try to find loss value
+        let loss = if let Some(pos) = line_lower.find("loss") {
+            let after_loss = &line[pos + 4..];
+            after_loss
+                .chars()
+                .skip_while(|c| !c.is_ascii_digit() && *c != '.')
+                .take_while(|c| c.is_ascii_digit() || *c == '.')
+                .collect::<String>()
+                .parse::<f64>()
+                .ok()
+        } else {
+            None
+        };
+
+        match (step, loss) {
+            (Some(s), Some(l)) => Some((s, l)),
+            _ => None,
+        }
+    }
+
     pub fn get_logs(&self) -> String {
         self.logs.iter().cloned().collect::<Vec<_>>().join("\n")
     }
