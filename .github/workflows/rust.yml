@@ -25,27 +25,27 @@ jobs:
 
       - name: Build Engine
         run: cargo build --verbose
-        working-directory: ./Bit-TTT/rust_engine
+        working-directory: ./crates/rust_engine
 
       - name: Run Tests (Engine)
         run: cargo test --verbose
-        working-directory: ./Bit-TTT/rust_engine
+        working-directory: ./crates/rust_engine
 
       - name: Build Llama
         run: cargo build --verbose
-        working-directory: ./Bit-TTT/bit_llama
+        working-directory: ./crates/bit_llama
 
       - name: Run Tests (Llama)
         run: cargo test --verbose
-        working-directory: ./Bit-TTT/bit_llama
+        working-directory: ./crates/bit_llama
 
       - name: Check Formatting
         run: cargo fmt --all -- --check
-        working-directory: ./Bit-TTT
+        working-directory: .
 
       - name: Run Clippy
         run: cargo clippy -- -D warnings
-        working-directory: ./Bit-TTT/rust_engine
+        working-directory: ./crates/rust_engine
 
       - name: Install cargo-audit
         uses: actions-rs/cargo@v1
@@ -55,4 +55,4 @@ jobs:
 
       - name: Security Audit
         run: cargo audit
-        working-directory: ./Bit-TTT/rust_engine
+        working-directory: ./crates/rust_engine
