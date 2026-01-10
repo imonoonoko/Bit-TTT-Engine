@@ -10,15 +10,6 @@ pub mod layers;
 pub mod model;
 pub mod python;
 
-// Legacy module (deprecated)
-pub mod legacy;
-
-// Legacy re-exports (Deprecated: use model types instead)
-#[deprecated(since = "0.2.0", note = "Use cortex_rust::model::layers instead")]
-pub use legacy::bit_linear::BitLinear as LegacyBitLinear;
-#[deprecated(since = "0.2.0", note = "Use cortex_rust::model::layers instead")]
-pub use legacy::ttt_layer::TTTLayer as LegacyTTTLayer;
-
 // Primary public API re-exports
 pub use layers::{BitLinear, RMSNorm, SwiGLU, TTTLayer};
 pub use model::{BitLlama, BitLlamaBlock, BitLlamaConfig, Llama};
