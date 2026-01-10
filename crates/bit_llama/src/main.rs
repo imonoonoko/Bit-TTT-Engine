@@ -1,3 +1,6 @@
+// Hide console window in release builds on Windows
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use anyhow::Result;
 use bit_llama::cli::{Cli, Commands};
 use bit_llama::{data, evaluate, export, gui, inference, train, vocab};
