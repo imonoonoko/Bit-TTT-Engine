@@ -1,6 +1,7 @@
 pub mod graph;
 pub mod i18n;
 pub mod presets;
+pub mod tabs;
 pub mod ui;
 
 use eframe::egui;
