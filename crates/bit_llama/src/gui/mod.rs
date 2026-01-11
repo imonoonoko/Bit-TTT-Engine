@@ -1,5 +1,6 @@
 pub mod graph;
 pub mod i18n;
+pub mod inference_session;
 pub mod presets;
 pub mod tabs;
 pub mod ui;
@@ -11,6 +12,7 @@ use std::path::Path;
 use crate::config::ProjectConfig;
 use crate::gui::graph::TrainingGraph;
 use crate::gui::i18n::Language;
+use crate::gui::inference_session::InferenceSession;
 use crate::gui::presets::ModelPreset;
 use crate::state::ProjectState;
 
@@ -22,7 +24,14 @@ pub enum AppTab {
     DataPrep,
     Preprocessing,
     Training,
+    Inference,
     Settings,
+}
+
+#[derive(Clone, Debug)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
 }
 
 pub struct BitStudioApp {
@@ -38,11 +47,17 @@ pub struct BitStudioApp {
     pub current_project: Option<ProjectState>,
     pub current_preset: ModelPreset,
 
+    // Inference State
+    pub inference_session: InferenceSession,
+    pub chat_history: Vec<ChatMessage>,
+    pub chat_input: String,
+
     // Project Selection
     pub available_projects: Vec<String>,
 
     // Training Visualization
     pub training_graph: TrainingGraph,
+    // System Monitor
 }
 
 impl Default for BitStudioApp {
@@ -65,6 +80,9 @@ impl Default for BitStudioApp {
             current_preset: ModelPreset::default(),
             available_projects: Self::scan_projects(),
             training_graph: TrainingGraph::new(),
+            inference_session: InferenceSession::new(),
+            chat_history: Vec::new(),
+            chat_input: String::new(),
         }
     }
 }
@@ -83,6 +101,7 @@ impl BitStudioApp {
                 }
             }
         }
+        projects.sort();
         projects
     }
 
@@ -126,6 +145,7 @@ impl BitStudioApp {
         };
 
         self.current_project = Some(ProjectState::new(path, config));
+        // Reset tab to DataPrep when loading? Or keep current?
         self.tab = AppTab::DataPrep;
     }
 }
@@ -133,6 +153,8 @@ impl BitStudioApp {
 impl eframe::App for BitStudioApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.set_pixels_per_point(1.2);
+
+        // Poll System Monitor (1Hz internally)
 
         // Poll process status and update graph
         if let Some(project) = &mut self.current_project {
@@ -153,6 +175,15 @@ impl eframe::App for BitStudioApp {
                 }
             }
         }
+
+        // Poll Inference Events (Generic, handled in tabs::inference::render mainly, but we can drain here if needed?)
+        // Actually, we should pass &mut app to render, and let render drain events.
+        // But render is called later.
+        // We can leave event polling to tabs/inference.rs render function.
+        // Or drain here and store in session struct?
+        // Session struct holds Rx. We need to drain to Tx?
+        // Ah, InferenceSession holds Rx.
+        // So we can drain it in `tabs::inference::render`.
 
         // Left Panel (Project Management)
         egui::SidePanel::left("project_panel")
@@ -212,12 +243,13 @@ impl eframe::App for BitStudioApp {
             });
 
         // Main Content
-        if let Some(project) = &mut self.current_project {
+        if self.current_project.is_some() {
             // Log Panel
             egui::TopBottomPanel::bottom("log_panel")
                 .resizable(true)
                 .default_height(150.0)
                 .show(ctx, |ui| {
+                    let project = self.current_project.as_mut().unwrap();
                     ui.heading("📟 Console Logs");
                     egui::ScrollArea::vertical()
                         .stick_to_bottom(true)
@@ -232,6 +264,7 @@ impl eframe::App for BitStudioApp {
 
             // Nav Panel
             egui::TopBottomPanel::top("nav_panel").show(ctx, |ui| {
+                let project = self.current_project.as_mut().unwrap();
                 ui.add_space(5.0);
                 ui.horizontal(|ui| {
                     ui.heading(format!("🚀 {}", project.config.name));
@@ -252,6 +285,7 @@ impl eframe::App for BitStudioApp {
                     ui.selectable_value(&mut self.tab, AppTab::DataPrep, "1️⃣ Data Prep");
                     ui.selectable_value(&mut self.tab, AppTab::Preprocessing, "2️⃣ Preprocessing");
                     ui.selectable_value(&mut self.tab, AppTab::Training, "3️⃣ Training");
+                    ui.selectable_value(&mut self.tab, AppTab::Inference, "4️⃣ Chat (Test)");
                     ui.selectable_value(&mut self.tab, AppTab::Settings, "⚙ Settings");
                 });
                 ui.add_space(5.0);

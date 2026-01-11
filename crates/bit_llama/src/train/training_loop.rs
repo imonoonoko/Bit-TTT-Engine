@@ -15,6 +15,16 @@ use tracing::{error, info, warn};
 use super::args::TrainArgs;
 use super::checkpoint::{find_checkpoint_path, load_start_step, save_training_state};
 use crate::loader::BitLoader;
+use fs2::FileExt;
+
+fn save_securely(varmap: &VarMap, path: &str) -> Result<()> {
+    let lock_path = format!("{}.lock", path);
+    let lock_file = File::create(&lock_path)?;
+    lock_file.lock_exclusive()?;
+    varmap.save(path)?;
+    lock_file.unlock()?;
+    Ok(())
+}
 
 /// Main training function
 pub fn run(args: TrainArgs) -> Result<()> {
@@ -288,7 +298,10 @@ pub fn run(args: TrainArgs) -> Result<()> {
         if Path::new("stop_signal").exists() {
             info!("\n🛑 Stop signal detected (Start of Loop)! Saving and exiting...");
             let _ = std::fs::remove_file("stop_signal");
-            varmap.save(&format!("{}bit_llama_checkpoint.safetensors", base_dir))?;
+            save_securely(
+                &varmap,
+                &format!("{}bit_llama_checkpoint.safetensors", base_dir),
+            )?;
             let state = serde_json::json!({ "step": step });
             if let Ok(file) = File::create(&state_path) {
                 serde_json::to_writer(file, &state)?;
@@ -366,7 +379,10 @@ pub fn run(args: TrainArgs) -> Result<()> {
                     "🏆 New best loss: {:.4} (Step {}) - Saving model_best.safetensors",
                     val, step
                 );
-                varmap.save(&format!("{}model_best.safetensors", effective_output_dir))?;
+                save_securely(
+                    &varmap,
+                    &format!("{}model_best.safetensors", effective_output_dir),
+                )?;
                 save_training_state(&effective_output_dir, "model_best", step, val)?;
             }
         }
@@ -375,10 +391,10 @@ pub fn run(args: TrainArgs) -> Result<()> {
         if stop_path.exists() {
             info!("\n🛑 Stop signal detected! Saving and exiting...");
             let _ = std::fs::remove_file("stop_signal");
-            varmap.save(&format!(
-                "{}bit_llama_checkpoint.safetensors",
-                effective_output_dir
-            ))?;
+            save_securely(
+                &varmap,
+                &format!("{}bit_llama_checkpoint.safetensors", effective_output_dir),
+            )?;
             save_training_state(
                 &effective_output_dir,
                 "bit_llama_checkpoint",
@@ -394,7 +410,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
             let safetensors_path = format!("{}.safetensors", filename_no_ext);
 
             info!("[Saving checkpoint: {}...]", safetensors_path);
-            varmap.save(&safetensors_path)?;
+            save_securely(&varmap, &safetensors_path)?;
             save_training_state(
                 &effective_output_dir,
                 &format!("checkpoint_step_{}", step),
@@ -417,7 +433,10 @@ pub fn run(args: TrainArgs) -> Result<()> {
 
         if !running.load(Ordering::SeqCst) {
             info!("[Shutdown] Saving checkpoint at step {}...", step);
-            varmap.save(&format!("{}bit_llama_checkpoint.safetensors", base_dir))?;
+            save_securely(
+                &varmap,
+                &format!("{}bit_llama_checkpoint.safetensors", base_dir),
+            )?;
             let state = serde_json::json!({ "step": step });
             if let Ok(file) = File::create(&state_path) {
                 serde_json::to_writer(file, &state)?;
@@ -438,7 +457,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
         std::fs::create_dir_all(output_dir)?;
 
         let model_path = format!("{}model.safetensors", dir);
-        varmap.save(&model_path)?;
+        save_securely(&varmap, &model_path)?;
         info!("✅ Model saved to: {}", model_path);
 
         let src_tokenizer = data_path_obj.join("tokenizer.json");
@@ -458,7 +477,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
         std::fs::write(&config_path, config_json)?;
         info!("✅ Model Config saved to: {}", config_path);
     } else {
-        varmap.save(&format!("{}bit_llama_v1.safetensors", base_dir))?;
+        save_securely(&varmap, &format!("{}bit_llama_v1.safetensors", base_dir))?;
     }
 
     Ok(())

@@ -28,16 +28,28 @@ pub fn run(args: InferenceArgs) -> Result<()> {
     println!("✅ Model Loaded!");
 
     loop {
+        // Signal that we are ready for input (machine readable)
+        eprintln!("<<READY>>");
+        // Also print user prompt for human usage
         print!("\n> ");
         io::stdout().flush()?;
+
         let mut prompt = String::new();
         io::stdin().read_line(&mut prompt)?;
         let prompt = prompt.trim();
+
         if prompt.is_empty() {
             continue;
         }
+
         if prompt == "exit" || prompt == "quit" {
             break;
+        }
+
+        if prompt == "/reset" {
+            llama.reset_state()?;
+            println!("🔄 Context/Memory has been reset.");
+            continue;
         }
 
         println!("[Generating...]");

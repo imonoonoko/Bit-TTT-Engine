@@ -1,0 +1,25 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [Unreleased] - 2026-01-11
+
+### Phase C: Optimization & Observability
+
+#### ✨ Features
+- **Unified Logging System**: Replaced `println!` with `tracing` crate. Logs are now structured and piped to the GUI console via `mpsc` channels.
+- **Shared DataLoader**: Introduced `BitLoader` (`src/loader.rs`) with `memmap2` for high-performance dataset loading, replacing ad-hoc loading logic.
+- **VRAM Monitor Implementation**:
+    - Implemented a real-time VRAM monitor using `nvml-wrapper` in `src/monitor.rs`.
+    - **Note**: Due to persistent linker instability on Windows/NVCC environments, the active integration was disabled (Circuit Breaker).
+    - The system currently uses **Static Estimation** (enhanced in `config.rs`) which is robust and compilation-safe.
+    - The real-time monitor code is preserved in the codebase for future enablement (`feature = "cuda"`).
+
+#### 🛠 Improvements
+- **GUI Refactoring**: Modularized `ui.rs` by extracting settings and tab logic, improving maintainability.
+- **Dependency Management**: Added `nvml-wrapper` as an optional dependency gated by `cuda` feature.
+- **Error Handling**: Resolved multiple compilation errors and duplicate module declarations in `lib.rs`.
+
+#### 🧹 Cleanup
+- Removed legacy `core_engine.rs` references.
+- Cleaned up commented-out "Circuit Breaker" code from the GUI layer.

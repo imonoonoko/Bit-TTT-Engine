@@ -36,6 +36,31 @@ pub struct ProjectState {
     pub download_status: Arc<Mutex<String>>,
 }
 
+// Shared State (for UI updates)
+pub struct SharedState {
+    pub logs: Vec<String>, // Changed from Vec<LogMessage> to Vec<String> to match ProjectState's logs
+    pub is_training: bool,
+    pub progress: f32, // 0.0 to 1.0
+    pub current_step: usize,
+    pub total_steps: usize,
+    pub loss_history: Vec<[f64; 2]>,    // [step, loss]
+    pub vram_usage: Option<(u64, u64)>, // (used_mb, total_mb) // Added
+}
+
+impl Default for SharedState {
+    fn default() -> Self {
+        Self {
+            logs: Vec::new(),
+            is_training: false,
+            progress: 0.0,
+            current_step: 0,
+            total_steps: 0,
+            loss_history: Vec::new(),
+            vram_usage: None, // Added
+        }
+    }
+}
+
 impl ProjectState {
     pub fn new(path: PathBuf, config: ProjectConfig) -> Self {
         let (tx, rx) = channel();
@@ -200,12 +225,23 @@ impl ProjectState {
         }
     }
 
-    pub fn stop_process(&mut self) {
+    pub fn request_stop(&mut self) {
+        self.log("🛑 Requesting graceful stop...");
+        if let Ok(mut file) = fs::File::create("stop_signal") {
+            let _ = file.write_all(b"stop");
+            self.log("Signal sent. Waiting for model save...");
+        } else {
+            self.log("Failed to create stop signal file!");
+        }
+    }
+
+    pub fn kill_process(&mut self) {
         if let Some(mut child) = self.active_process.take() {
             let _ = child.kill();
-            self.log("Process killed by user.");
+            self.log("Process killed by user (Force).");
         }
         self.is_running = false;
+        let _ = fs::remove_file("stop_signal");
     }
 
     pub fn concat_txt_files(&mut self) {

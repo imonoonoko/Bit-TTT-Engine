@@ -1,95 +1,18 @@
-# SYNERGY_DESIGN.md - Bit-TTT シナジー設計
+# Synergy & Value Design: Phase C (Optimization)
 
-**作成日**: 2026-01-11
-**目的**: 既存リソースの活用と付加価値の設計
+## 1. Efficiency Optimization
+Implementing `nvml-wrapper` provides more than just VRAM usage.
+- **Thermal Throttling Prevention**: We can monitor GPU temperature (`Nvml::device_temperature`). Training performance degrades significantly if thermal throttling occurs.
+    - *Action*: Add a simple temperature indicator.
+- **Utilization Tracking**: Monitoring "Graphics Utilization" ensures we aren't CPU-bound. If GPU utilization < 90% during training, we know we should increase batch size or optimize DataLoader.
+    - *Action*: Display Utilization %.
 
----
+## 2. Cross-Functional Synergy
+- **Preset Calibration**: If we know the user has 24GB VRAM (detected via NVML), we can *auto-suggest* the "High" preset instead of assuming.
+    - *Future Idea*: "Auto-Detect Hardware" button in Settings.
+- **OOM Prevention**: If VRAM hits >95%, we can pause training or trigger a "Save Checkpoint" before a crash occurs.
+    - *For this phase*: Just display the Warning Color.
 
-## 1. 効率化ポイント (Efficiency Optimization)
-
-### 既存の仕組みを流用可能な箇所
-
-| 既存資産 | リファクタリングでの活用方法 |
-|----------|------------------------------|
-| `BitLoader` (loader.rs) | 分割後も `train/`, `evaluate/` から共通利用。インターフェースは維持。 |
-| `ProjectConfig` (config.rs) | モデル設定と学習設定を分離する基盤として活用。 |
-| `tracing` ロギング | 分割後もそのまま使用。モジュール名でフィルタ可能な構造を維持。 |
-| `#[derive(Args)]` (Clap) | CLI引数定義を独立ファイルに移動しても互換性維持可能。 |
-
-### 新規開発を避けられる箇所
-
-| タスク | 避ける理由 |
-|--------|------------|
-| カスタムシリアライザ | `safetensors` + `serde` で十分 |
-| 独自ログフレームワーク | `tracing` が既に統合済み |
-| GUI状態管理ライブラリ | 現状の `state.rs` + `mpsc` で対応可能 |
-
----
-
-## 2. 同時改善可能な項目 (Cross-Functional Synergy)
-
-### UX 向上
-
-| 改善項目 | 現状 | 改善後 | 実装負荷 |
-|----------|------|--------|----------|
-| チェックポイント管理 | `train.rs` 内に混在 | `CheckpointManager` として独立。GUI から「過去のセーブ一覧」表示可能に | 中 |
-| 学習再開 | `--load` フラグで手動指定 | 自動検出で最新チェックポイントから再開提案 | 低 |
-| エラーメッセージ | `anyhow::bail!` のみ | 構造化エラー型でGUIにわかりやすく表示 | 中 |
-
-### パフォーマンス向上
-
-| 改善項目 | 現状 | 改善後 | 実装負荷 |
-|----------|------|--------|----------|
-| モデル初期化 | 毎回フルビルド | `Llama::from_pretrained()` でキャッシュ活用 | 低 |
-| 推論プリコンパイル | 呼び出し時に `precompute_for_inference()` | 学習終了時に自動実行してキャッシュ | 低 |
-| レイヤー分割 | なし（将来対応） | Multi-GPU対応の土台として層をモジュール化 | - (Phase 15 で対応) |
-
----
-
-## 3. トレードオフ分析
-
-### 分割 vs 維持
-
-| 観点 | 分割のメリット | 分割のデメリット |
-|------|----------------|------------------|
-| **可読性** | 各ファイル < 300行で把握しやすい | ファイル数増加でナビゲーション複雑化 |
-| **テスト** | 単体テストが書きやすい | 統合テストの設計が必要 |
-| **コンパイル** | 増分コンパイルが高速化 | 初回ビルドは変わらない |
-| **協調作業** | 複数人でのコンフリクト減少 | 1人開発では恩恵小 |
-
-**結論**: 現状の巨大ファイルは保守性を著しく損なうため、**分割のメリットがデメリットを上回る**。
-
----
-
-## 4. 最小工数で最大効果を得るアプローチ
-
-### 推奨順序
-
-1. **`core_engine.rs` の層分割** (影響範囲小、効果大)
-   - `layers/` ディレクトリを作成
-   - 各層を独立ファイルに抽出
-   - `lib.rs` で `pub use` により互換性維持
-
-2. **`train.rs` の責務分離** (影響範囲中、効果大)
-   - `TrainArgs` を `args.rs` に分離
-   - `CheckpointManager` を抽出
-   - メインループをコンパクト化
-
-3. **`legacy/` の削除** (影響範囲なし、負債解消)
-   - 使用箇所がないことを確認後、安全に削除
-
----
-
-## 5. 付加価値創出
-
-### リファクタリングと同時に実現可能な機能
-
-| 機能 | 説明 | 対応Phase |
-|------|------|-----------|
-| **モジュールテスト** | `layers/` 分割により各層のユニットテストが可能に | Phase 1 |
-| **ドキュメント生成** | `rustdoc` がモジュール単位で綺麗に生成 | Phase 1 |
-| **プラグイン拡張** | 層がモジュール化されれば新しい `TTTVariant` の追加が容易 | Phase 2 |
-
----
-
-**次のステップ**: Step 4 (Verification Strategy) で検証計画を策定
+## 3. Value Proposition
+- **User Confidence**: Seeing the VRAM bar gives peace of mind ("I'm using 18GB of my 24GB").
+- **Debugging**: Helps diagnose if memory is leaking (graph keeps going up).

@@ -21,6 +21,8 @@ egui_plot = "0.26"  # Graph plotting
 # Note: We point to the local rust_engine folder
 cortex_rust = { path = "../rust_engine" }
 memmap2 = "0.9"
+fs2 = "0.4"
+nvml-wrapper = { version = "0.9", optional = true }
 chrono = { version = "0.4.42", features = ["serde"] }
 rfd = "0.17.1"
 byteorder = "1.5.0"
@@ -41,4 +43,4 @@ path = "src/main.rs"
 
 [features]
 default = []
-cuda = ["candle-core/cuda", "candle-nn/cuda"]
+cuda = ["candle-core/cuda", "candle-nn/cuda", "dep:nvml-wrapper"]

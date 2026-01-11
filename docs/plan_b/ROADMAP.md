@@ -1,23 +1,26 @@
-# ロードマップ: GUI機能強化 (Phase C-2)
+# Roadmap: Phase C (Optimization & Observability)
 
-## Phase 1: コア機能強化 (MVP)
-*   **目的**: プロセス管理と設定反映の信頼性を確保する。
-*   **タスク**:
-    1.  [x] **バックグラウンド・ログストリーミング**:
-        - 子プロセスのログを `std::sync::mpsc` チャネル経由で非同期にUIスレッドへ転送する実装。
-    2.  [x] **リアルタイム設定同期**:
-        - UI上の操作が `ProjectConfig` 構造体に即座に反映され、保存時に確実に永続化されることを保証する。
-    3.  [x] **日本語フォントの適用**:
-        - ヘッダー、ボタン、テキストエディタ等、全てのUI要素が `setup_custom_fonts` で読み込んだフォントを正しく使用しているか確認・修正する。
+## 1. Phasing Strategy
 
-## Phase 2: 可観測性の向上 (Enhancement)
-*   **目的**: 学習の進捗状況を視覚的にフィードバックする。
-*   **タスク**:
-    1.  [ ] **メトリクス解析**:
-        - ログ行 `Step: (\d+), Loss: ([\d.]+)` を正規表現でパースし、数値を抽出するロジックの実装。
-    2.  [ ] **プログレスバー**:
-        - 抽出したステップ数に基づき、`egui::ProgressBar` で進捗率を表示する。
+### Phase C-1: Monitor Core (State & Backend)
+- **Goal**: Establish the backend capability to read real VRAM usage.
+- **Tasks**:
+    1. Update `Cargo.toml` with `nvml-wrapper` (optional feature `cuda`).
+    2. Create `src/monitor.rs` (abstraction layer over NVML).
+    3. Update `SharedState` to include `vram_usage: Option<(u64, u64)>` (used / total).
+    4. Spawn a background thread in `launcher.rs` to poll VRAM (1Hz).
 
-## 撤退基準 (Circuit Breaker)
-*   **タイムリミット**: Phase 1 の実装は **2時間以内** を目安とする。
-*   **ロールバック**: `mpsc` チャネルによる非同期化で複雑なデッドロックが発生した場合、従来の `try_wait` ポーリング方式に戻し、読み取りバッファサイズの最適化で対応する。
+### Phase C-2: UI Integration (Frontend)
+- **Goal**: Visualize the data.
+- **Tasks**:
+    1. Update `Dashboard` tab to show a Progress Bar.
+    2. Color-code the bar (Green < 80%, Orange < 95%, Red > 95%).
+    3. Fallback: If `vram_usage` is `None`, show the "Estimated" value (Phase 2 logic) or a "N/A" label.
+
+## 2. Circuit Breaker (Stop Rule)
+- **Time Boxing**: 2 Hours.
+- **Abort Condition**: If `nvml-wrapper` causes linker errors on the user's Windows environment that cannot be solved within 30 mins, **abandon Real-Time monitor** and fallback to "Static Estimation Only" (Close the ticket).
+
+## 3. Resources
+- **Compute**: Local GPU (User's environment).
+- **Cost**: Zero (Local).

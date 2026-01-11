@@ -16,25 +16,25 @@ graph TD
     Start(("Phase A<br/>完了")):::done
 
     subgraph Phase_B0 ["🛑 Phase B-0: 緊急対応 (Structural Fix)"]
-        B0["コマンド呼び出し修正<br/>cargo run → current_exe"]:::urgent
+        B0["コマンド呼び出し修正<br/>cargo run → current_exe"]:::done
         noteB0["これがないと<br/>配布環境で動きません"]
         B0 -.- noteB0
     end
 
     subgraph Phase_B ["🚧 Phase B: 統合 (Integration)"]
-        B1["ログ・ストリーミング<br/>state.rs → GUI Console"]:::next
-        B2["設定の同期<br/>Config → CLI Args"]:::next
-        B3["エラーハンドリング<br/>プロセス監視・停止"]:::next
+        B1["ログ・ストリーミング<br/>state.rs → GUI Console"]:::done
+        B2["設定の同期<br/>Config → CLI Args"]:::done
+        B3["エラーハンドリング<br/>プロセス監視・停止"]:::done
     end
 
     subgraph Phase_C ["📊 Phase C: 可視化 (Visualization)"]
-        C1["学習曲線グラフ<br/>Loss Parsing & Plot"]:::future
-        C2["VRAMモニタリング<br/>Real usage check"]:::future
+        C1["学習曲線グラフ<br/>Loss Parsing & Plot"]:::done
+        C2["VRAMモニタリング<br/>Real usage check"]:::done
     end
 
     subgraph Phase_D ["⚡ Phase D: 完成 (Completion)"]
-        D1["推論プレイグラウンド<br/>Chat UI"]:::future
-        D2["配布用ビルド<br/>Release Build"]:::future
+        D1["推論プレイグラウンド<br/>Chat UI"]:::next
+        D2["配布用ビルド<br/>Release Build"]:::done
     end
 
     %% 依存関係の接続

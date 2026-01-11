@@ -1,5 +1,6 @@
 use eframe::egui;
 use std::env;
+use std::path::Path;
 
 use crate::gui::graph::TrainingGraph;
 use crate::gui::i18n::{t, Language};
@@ -82,11 +83,36 @@ pub fn show(
                     );
                 }
             } else {
-                if ui.button(t(language, "stop_training")).clicked() {
-                    project.stop_process();
+                let stop_signal = Path::new("stop_signal").exists();
+                let btn_text = if stop_signal {
+                    "💀 Force Stop"
+                } else {
+                    "🛑 Stop Training"
+                };
+                let btn_color = if stop_signal {
+                    egui::Color32::RED
+                } else {
+                    egui::Color32::YELLOW
+                };
+
+                if ui
+                    .button(egui::RichText::new(btn_text).color(btn_color))
+                    .clicked()
+                {
+                    if stop_signal {
+                        project.kill_process();
+                        // remove signal (handled by kill_process)
+                    } else {
+                        project.request_stop();
+                    }
                 }
+
                 ui.spinner();
-                ui.label(&project.status_message);
+                if stop_signal {
+                    ui.label("Stop Requested (Saving)...");
+                } else {
+                    ui.label(&project.status_message);
+                }
             }
         });
     });

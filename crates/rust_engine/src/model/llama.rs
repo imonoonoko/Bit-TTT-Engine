@@ -2,6 +2,7 @@
 
 use candle_core::{DType, Module, Result, Tensor};
 use candle_nn::VarBuilder;
+// use fs2::FileExt; // Implicitly used? Or compiler bug. Keeping commented to silence warning.
 use std::path::Path;
 use tokenizers::Tokenizer;
 
@@ -145,6 +146,8 @@ pub struct Llama {
     pub tokenizer: Tokenizer,
     pub device: candle_core::Device,
     pub w_states: Vec<Tensor>,
+    /// Holds the shared lock on the model file to prevent modification during use
+    pub _lock_file: Option<std::fs::File>,
 }
 
 impl Llama {
@@ -166,7 +169,7 @@ impl Llama {
                     return Self::from_bitt_file_with_device(path, device);
                 } else if ext == "safetensors" {
                     let parent = path.parent().unwrap_or(Path::new("."));
-                    return Self::new_with_device(parent, device);
+                    return Self::new_with_weights(parent, path, device);
                 }
             }
         } else if path.is_dir() {
@@ -194,6 +197,19 @@ impl Llama {
         device: &candle_core::Device,
     ) -> anyhow::Result<Self> {
         let path = path.as_ref();
+
+        // 🔒 Phase 2: Shared Lock
+        let lock_path = format!("{}.lock", path.display());
+        let lock_file_handle = std::fs::File::open(&lock_path)
+            .or_else(|_| std::fs::File::create(&lock_path))
+            .ok();
+
+        if let Some(ref f) = lock_file_handle {
+            if let Err(e) = f.lock_shared() {
+                tracing::warn!("Failed to acquire shared lock on {}: {}", lock_path, e);
+            }
+        }
+
         let file = std::fs::File::open(path)?;
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
 
@@ -245,6 +261,7 @@ impl Llama {
             tokenizer,
             device: device.clone(),
             w_states,
+            _lock_file: lock_file_handle,
         })
     }
 
@@ -258,19 +275,46 @@ impl Llama {
         device: &candle_core::Device,
     ) -> anyhow::Result<Self> {
         let dir = model_dir.as_ref();
+        Self::new_with_weights(dir, &dir.join("model.safetensors"), device)
+    }
+
+    pub fn new_with_weights<P: AsRef<Path>>(
+        model_dir: P,
+        weights_path: P,
+        device: &candle_core::Device,
+    ) -> anyhow::Result<Self> {
+        let dir = model_dir.as_ref();
+        let weights = weights_path.as_ref();
+
+        // 🔒 Phase 2: Shared Lock
+        let lock_path = format!("{}.lock", weights.display());
+        let lock_file_handle = std::fs::File::open(&lock_path)
+            .or_else(|_| std::fs::File::create(&lock_path))
+            .ok();
+
+        if let Some(ref f) = lock_file_handle {
+            if let Err(e) = f.lock_shared() {
+                tracing::warn!("Failed to acquire shared lock on {}: {}", lock_path, e);
+            }
+        }
 
         let config_path = dir.join("config.json");
-        let config_str = std::fs::read_to_string(&config_path)
-            .map_err(|e| anyhow::anyhow!("Failed to read config.json: {}", e))?;
+        let config_str = std::fs::read_to_string(&config_path).map_err(|e| {
+            anyhow::anyhow!("Failed to read config.json from {:?}: {}", config_path, e)
+        })?;
         let config: BitLlamaConfig = serde_json::from_str(&config_str)?;
 
         let tokenizer_path = dir.join("tokenizer.json");
-        let tokenizer = Tokenizer::from_file(&tokenizer_path)
-            .map_err(|e| anyhow::anyhow!("Failed to load tokenizer.json: {}", e))?;
+        let tokenizer = Tokenizer::from_file(&tokenizer_path).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to load tokenizer.json from {:?}: {}",
+                tokenizer_path,
+                e
+            )
+        })?;
 
-        let weights_path = dir.join("model.safetensors");
         let vb = unsafe {
-            candle_nn::VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, device)?
+            candle_nn::VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, device)?
         };
 
         let mut model = BitLlama::load(config, vb)?;
@@ -288,6 +332,7 @@ impl Llama {
             tokenizer,
             device: device.clone(),
             w_states,
+            _lock_file: lock_file_handle,
         })
     }
 
@@ -437,6 +482,14 @@ impl Llama {
         file.write_all(&header_vec)?;
         file.write_all(&safetensors_bytes)?;
 
+        Ok(())
+    }
+
+    pub fn reset_state(&mut self) -> anyhow::Result<()> {
+        let d_small = self.model.config.hidden_dim / 4;
+        for w in self.w_states.iter_mut() {
+            *w = Tensor::zeros((d_small, d_small), DType::F32, &self.device)?;
+        }
         Ok(())
     }
 
