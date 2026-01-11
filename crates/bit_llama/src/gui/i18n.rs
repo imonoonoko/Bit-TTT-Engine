@@ -1,5 +1,5 @@
 //! Internationalization (i18n) - Language support for GUI
-//! 
+//!
 //! Provides EN/JA translations for all UI text.
 
 /// Supported languages
@@ -63,7 +63,9 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         // === Data Preparation ===
         (Language::Japanese, "step1_title") => "📝 ステップ 1: データ準備",
         (Language::English, "step1_title") => "📝 Step 1: Data Preparation",
-        (Language::Japanese, "step1_desc") => "テキストファイルをインポートして学習用コーパスを作成します。",
+        (Language::Japanese, "step1_desc") => {
+            "テキストファイルをインポートして学習用コーパスを作成します。"
+        }
         (Language::English, "step1_desc") => "Import text files to create a training corpus.",
         (Language::Japanese, "collect_raw") => "1. 素材を収集",
         (Language::English, "collect_raw") => "1. Collect Raw Material",
@@ -119,8 +121,12 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (Language::English, "stop_training") => "⏹ STOP",
         (Language::Japanese, "training_progress") => "📊 学習進捗",
         (Language::English, "training_progress") => "📊 Training Progress",
-        (Language::Japanese, "no_training_data") => "学習データがありません。学習を開始するとLoss曲線が表示されます。",
-        (Language::English, "no_training_data") => "No training data yet. Start training to see the loss curve.",
+        (Language::Japanese, "no_training_data") => {
+            "学習データがありません。学習を開始するとLoss曲線が表示されます。"
+        }
+        (Language::English, "no_training_data") => {
+            "No training data yet. Start training to see the loss curve."
+        }
         (Language::Japanese, "clear_graph") => "🗑 グラフをクリア",
         (Language::English, "clear_graph") => "🗑 Clear Graph",
 
@@ -182,35 +188,35 @@ pub fn t_tooltip(lang: Language, key: &str) -> &'static str {
         // === Architecture ===
         (Language::Japanese, "model_dim") => "隠れ層の次元数。大きいほど表現力↑、VRAM消費↑\n推奨: 256 (Small) / 512 (Medium)",
         (Language::English, "model_dim") => "Hidden layer dimension. Higher = more expressive, more VRAM.\nRecommended: 256 (Small) / 512 (Medium)",
-        
+
         (Language::Japanese, "layers") => "Transformerブロックの数。大きいほど深いモデル。\n推奨: 8 (Small) / 12 (Medium)",
         (Language::English, "layers") => "Number of transformer blocks. More = deeper model.\nRecommended: 8 (Small) / 12 (Medium)",
-        
+
         (Language::Japanese, "context_len") => "一度に処理できるトークン数。\n長いほど文脈を理解できるがVRAM消費↑",
         (Language::English, "context_len") => "Maximum tokens processed at once.\nLonger = better context understanding, more VRAM.",
-        
+
         (Language::Japanese, "heads") => "マルチヘッドアテンションのヘッド数。\n通常は hidden_dim / 64",
         (Language::English, "heads") => "Number of attention heads.\nUsually hidden_dim / 64.",
-        
+
         (Language::Japanese, "vocab_size") => "トークナイザーの語彙サイズ。\n推奨: 8192〜16384",
         (Language::English, "vocab_size") => "Tokenizer vocabulary size.\nRecommended: 8192-16384.",
 
         // === Hyperparameters ===
         (Language::Japanese, "batch_size") => "1回の更新で処理するサンプル数。\n大きいほど安定・高速だがVRAM消費↑",
         (Language::English, "batch_size") => "Samples per update. Larger = more stable/faster, more VRAM.",
-        
+
         (Language::Japanese, "steps") => "学習の総ステップ数。\n1000〜10000 が一般的。",
         (Language::English, "steps") => "Total training steps.\nTypically 1000-10000.",
-        
+
         (Language::Japanese, "learning_rate") => "学習率 (LR)。大きすぎると発散、小さすぎると遅い。\n推奨: 1e-4 〜 3e-4",
         (Language::English, "learning_rate") => "Learning rate. Too high = unstable, too low = slow.\nRecommended: 1e-4 to 3e-4.",
-        
+
         (Language::Japanese, "min_lr") => "コサインスケジュールの最小学習率。\n推奨: 1e-5 〜 1e-6",
         (Language::English, "min_lr") => "Minimum LR for cosine schedule.\nRecommended: 1e-5 to 1e-6.",
-        
+
         (Language::Japanese, "warmup_steps") => "学習率を徐々に上げるステップ数。\n推奨: 全ステップの 5-10%",
         (Language::English, "warmup_steps") => "Steps to gradually increase LR.\nRecommended: 5-10% of total steps.",
-        
+
         (Language::Japanese, "save_interval") => "チェックポイントを保存する間隔 (ステップ)。\n推奨: 500",
         (Language::English, "save_interval") => "Checkpoint save interval (steps).\nRecommended: 500.",
 
