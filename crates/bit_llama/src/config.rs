@@ -2,10 +2,10 @@
 //!
 //! Handles project configuration, VRAM estimation, and serialization.
 
+use crate::vocab::ModelType;
 use chrono;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
-use crate::vocab::ModelType;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ProjectConfig {

@@ -69,4 +69,3 @@ fn run_clean(args: CleanArgs) -> Result<()> {
     println!("✨ Cleaned text saved to {:?}", args.output);
     Ok(())
 }
-

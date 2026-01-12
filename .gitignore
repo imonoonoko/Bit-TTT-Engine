@@ -9,7 +9,7 @@ stop_signal
 # Project Specific
 pre_demon_test/
 projects/
-data/
+/data/
 legacy/
 release_dist/
 

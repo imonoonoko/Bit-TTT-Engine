@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Args, ValueEnum};
-use std::path::Path;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 use tokenizers::decoders::byte_level::ByteLevel as ByteLevelDec;
 use tokenizers::decoders::metaspace::Metaspace as MetaspaceDec;
@@ -95,10 +95,18 @@ fn train_bpe(args: VocabArgs) -> Result<()> {
     println!("Configuration: BPE (GPT-2 Style)");
 
     // Explicitly typed TokenizerImpl for BPE
-    let mut tokenizer: TokenizerImpl<BPE, NormalizerWrapper, PreTokenizerWrapper, PostProcessorWrapper, DecoderWrapper> = TokenizerImpl::new(BPE::default());
+    let mut tokenizer: TokenizerImpl<
+        BPE,
+        NormalizerWrapper,
+        PreTokenizerWrapper,
+        PostProcessorWrapper,
+        DecoderWrapper,
+    > = TokenizerImpl::new(BPE::default());
     tokenizer.with_pre_tokenizer(Some(PreTokenizerWrapper::ByteLevel(ByteLevel::default())));
     tokenizer.with_decoder(Some(DecoderWrapper::ByteLevel(ByteLevelDec::default())));
-    tokenizer.with_post_processor(Some(PostProcessorWrapper::ByteLevel(ByteLevelPost::default())));
+    tokenizer.with_post_processor(Some(PostProcessorWrapper::ByteLevel(
+        ByteLevelPost::default(),
+    )));
     tokenizer.with_normalizer(Option::<NormalizerWrapper>::None);
 
     let special_tokens = get_special_tokens();
@@ -110,10 +118,12 @@ fn train_bpe(args: VocabArgs) -> Result<()> {
         .build();
 
     println!("Starting training (BPE)...");
-    tokenizer.train_from_files(&mut trainer, files)
+    tokenizer
+        .train_from_files(&mut trainer, files)
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    tokenizer.save(&args.output, true)
+    tokenizer
+        .save(&args.output, true)
         .map_err(|e| anyhow::anyhow!("{}", e))?;
     println!("✅ Tokenizer saved to {}", args.output);
     println!("📊 Final vocab size: {}", tokenizer.get_vocab_size(true));
@@ -125,7 +135,13 @@ fn train_unigram(args: VocabArgs) -> Result<()> {
     println!("Configuration: Unigram (SentencePiece Style) + NFKC");
 
     // Explicitly typed TokenizerImpl for Unigram
-    let mut tokenizer: TokenizerImpl<Unigram, NormalizerWrapper, PreTokenizerWrapper, PostProcessorWrapper, DecoderWrapper> = TokenizerImpl::new(Unigram::default());
+    let mut tokenizer: TokenizerImpl<
+        Unigram,
+        NormalizerWrapper,
+        PreTokenizerWrapper,
+        PostProcessorWrapper,
+        DecoderWrapper,
+    > = TokenizerImpl::new(Unigram::default());
 
     // Unigram Setup: NFKC -> Metaspace
     tokenizer.with_normalizer(Some(NormalizerWrapper::NFKC(NFKC)));
@@ -141,10 +157,12 @@ fn train_unigram(args: VocabArgs) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to build Unigram trainer: {}", e))?;
 
     println!("Starting training (Unigram)...");
-    tokenizer.train_from_files(&mut trainer, files)
+    tokenizer
+        .train_from_files(&mut trainer, files)
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    tokenizer.save(&args.output, true)
+    tokenizer
+        .save(&args.output, true)
         .map_err(|e| anyhow::anyhow!("{}", e))?;
     println!("✅ Tokenizer saved to {}", args.output);
     println!("📊 Final vocab size: {}", tokenizer.get_vocab_size(true));
@@ -165,7 +183,10 @@ mod tests {
 
         // Create dummy Japanese corpus with mixed characters
         let mut file = std::fs::File::create(&input_path)?;
-        writeln!(file, "昔々あるところに、お爺さんとお婆さんが住んでいました。")?;
+        writeln!(
+            file,
+            "昔々あるところに、お爺さんとお婆さんが住んでいました。"
+        )?;
         writeln!(file, "ＡＢＣａｂｃ１２３")?; // Fullwidth to test NFKC
         writeln!(file, "🍎🍊🍇")?; // Emojis
         writeln!(file, "Kyoto is nice.")?;
@@ -185,7 +206,9 @@ mod tests {
         let tokenizer = Tokenizer::from_file(&output_path).map_err(|e| anyhow::anyhow!(e))?;
 
         // Test Normalization (NFKC: ＡＢＣ -> ABC)
-        let encoding = tokenizer.encode("ＡＢＣ", false).map_err(|e| anyhow::anyhow!(e))?;
+        let encoding = tokenizer
+            .encode("ＡＢＣ", false)
+            .map_err(|e| anyhow::anyhow!(e))?;
         let tokens = encoding.get_tokens();
         println!("Normalized Tokens: {:?}", tokens);
 
@@ -196,8 +219,12 @@ mod tests {
 
         // Test Roundtrip
         let text = "昔々あるところに";
-        let encoded = tokenizer.encode(text, false).map_err(|e| anyhow::anyhow!(e))?;
-        let decoded = tokenizer.decode(encoded.get_ids(), false).map_err(|e| anyhow::anyhow!(e))?;
+        let encoded = tokenizer
+            .encode(text, false)
+            .map_err(|e| anyhow::anyhow!(e))?;
+        let decoded = tokenizer
+            .decode(encoded.get_ids(), false)
+            .map_err(|e| anyhow::anyhow!(e))?;
         // Remove Metaspace underscores (U+2581) for comparison
         assert_eq!(decoded.replace("\u{2581}", ""), text);
 

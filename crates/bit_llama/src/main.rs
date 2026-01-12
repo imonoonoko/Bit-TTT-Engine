@@ -23,7 +23,11 @@ fn main() -> Result<()> {
     tracing_subscriber::registry()
         .with(env_filter)
         .with(tracing_subscriber::fmt::layer()) // Stdout
-        .with(tracing_subscriber::fmt::layer().with_writer(non_blocking).with_ansi(false)) // File
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(non_blocking)
+                .with_ansi(false),
+        ) // File
         .init();
 
     // 4. Setup Panic Hook
@@ -37,7 +41,10 @@ fn main() -> Result<()> {
             "Unknown panic"
         };
 
-        let location = panic_info.location().map(|l| format!("{}:{}", l.file(), l.line())).unwrap_or_default();
+        let location = panic_info
+            .location()
+            .map(|l| format!("{}:{}", l.file(), l.line()))
+            .unwrap_or_default();
         tracing::error!(target: "panic", "🔥 CRASH detected at {}: {}", location, msg);
         // Also print to stderr just in case console is visible
         eprintln!("🔥 CRASH detected at {}: {}", location, msg);
