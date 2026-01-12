@@ -20,7 +20,12 @@ pub struct TTTLayer {
 }
 
 impl TTTLayer {
-    pub fn load(hidden_dim: usize, inner_lr: f64, vb: VarBuilder, device: &candle_core::Device) -> Result<Self> {
+    pub fn load(
+        hidden_dim: usize,
+        inner_lr: f64,
+        vb: VarBuilder,
+        device: &candle_core::Device,
+    ) -> Result<Self> {
         let d_small = hidden_dim / 4;
         Ok(Self {
             hidden_dim,

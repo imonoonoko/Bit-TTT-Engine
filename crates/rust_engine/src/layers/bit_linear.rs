@@ -23,7 +23,8 @@ pub struct BitLinear {
 impl BitLinear {
     pub fn load(in_dim: usize, out_dim: usize, vb: VarBuilder, device: &Device) -> Result<Self> {
         let init = candle_nn::init::DEFAULT_KAIMING_NORMAL;
-        let weight = vb.get_with_hints((out_dim, in_dim), "weight", init)?
+        let weight = vb
+            .get_with_hints((out_dim, in_dim), "weight", init)?
             .to_device(device)?;
         Ok(Self {
             weight,
@@ -59,14 +60,14 @@ impl BitLinear {
             // Automatic Dispatch based on device
             match x.device() {
                 Device::Cpu => {
-                     // Use Optimized CPU Kernel (AVX2)
-                     return BitLinearCpu::forward(x, packed);
+                    // Use Optimized CPU Kernel (AVX2)
+                    return BitLinearCpu::forward(x, packed);
                 }
                 Device::Cuda(_) => {
-                     // Use Custom CUDA Kernel (BitNet)
-                     // Note: Ideally BitLinearCuda::forward should handle this.
-                     // It currently has a stub, but we will wire it up.
-                     return BitLinearCuda::forward(x, packed);
+                    // Use Custom CUDA Kernel (BitNet)
+                    // Note: Ideally BitLinearCuda::forward should handle this.
+                    // It currently has a stub, but we will wire it up.
+                    return BitLinearCuda::forward(x, packed);
                 }
                 _ => {
                     // Fallback to Metal/etc if we implement them later

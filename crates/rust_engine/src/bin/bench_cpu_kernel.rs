@@ -37,7 +37,10 @@ fn main() -> anyhow::Result<()> {
     // We create a dummy PackedTensor directly to save setup time
     // Data size = N * K / 4
     let packed_len = n * k / 4;
-    println!("Packed Weight Size: {:.2} MB", packed_len as f64 / 1024.0 / 1024.0);
+    println!(
+        "Packed Weight Size: {:.2} MB",
+        packed_len as f64 / 1024.0 / 1024.0
+    );
 
     // Fill with random bytes (simulating packed weights)
     // rand::random is slow, just fill cyclic pattern

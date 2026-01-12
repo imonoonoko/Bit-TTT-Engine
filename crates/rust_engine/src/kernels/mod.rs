@@ -1,3 +1,3 @@
-pub mod packing;
-pub mod cuda;
 pub mod cpu;
+pub mod cuda;
+pub mod packing;

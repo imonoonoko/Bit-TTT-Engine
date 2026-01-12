@@ -89,8 +89,6 @@ impl BitLlamaConfig {
 
         let layer_size = weight_bytes + kv_bytes + overhead;
 
-
-
         // Log basic info (via tracing or println if tracing not init)
         // But this is pure func if possible.
         // We return count.
@@ -103,4 +101,3 @@ impl BitLlamaConfig {
         }
     }
 }
-

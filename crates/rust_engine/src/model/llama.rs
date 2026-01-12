@@ -43,12 +43,19 @@ impl BitLlama {
                     match crate::device_utils::get_vram_info(0) {
                         Ok((free, total)) => {
                             let possible = cfg.calculate_auto_offload(free);
-                            println!("[Auto-Config] Detected VRAM: {} MB Free / {} MB Total", free / 1024 / 1024, total / 1024 / 1024);
+                            println!(
+                                "[Auto-Config] Detected VRAM: {} MB Free / {} MB Total",
+                                free / 1024 / 1024,
+                                total / 1024 / 1024
+                            );
                             println!("[Auto-Config] Strategy: {} Layers on GPU / {} on CPU. (Safety Margin: 2GB)", possible, cfg.num_layers.saturating_sub(possible));
                             possible
                         }
                         Err(e) => {
-                            eprintln!("[Auto-Config] Failed to detect VRAM: {}. Defaulting to CPU.", e);
+                            eprintln!(
+                                "[Auto-Config] Failed to detect VRAM: {}. Defaulting to CPU.",
+                                e
+                            );
                             0
                         }
                     }
@@ -57,7 +64,6 @@ impl BitLlama {
                 }
             }
         };
-
 
         let embedding = candle_nn::embedding(cfg.vocab_size, cfg.hidden_dim, vb.pp("embed"))?;
         // Embedding usually stays on GPU (or main device) as it's the entry point.
@@ -76,17 +82,13 @@ impl BitLlama {
 
         let mut layers = Vec::new();
         for i in 0..cfg.num_layers {
-            let target_device = if i < n_gpu {
-                &main_device
-            } else {
-                &cpu_device
-            };
+            let target_device = if i < n_gpu { &main_device } else { &cpu_device };
 
             let layer = BitLlamaBlock::load(
                 cfg.hidden_dim,
                 cfg.inner_lr,
                 vb.pp(format!("layers.{}", i)),
-                target_device
+                target_device,
             )?;
             layers.push(layer);
         }
@@ -140,7 +142,7 @@ impl BitLlama {
             // W state also needs to be on correct device
             let w_state = &w_states[i];
             let w_device = w_state.device();
-             let w_in = if w_device.same_device(layer_device) {
+            let w_in = if w_device.same_device(layer_device) {
                 std::borrow::Cow::Borrowed(w_state)
             } else {
                 std::borrow::Cow::Owned(w_state.to_device(layer_device)?)

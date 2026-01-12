@@ -23,7 +23,10 @@ pub fn get_vram_info(_device_id: usize) -> Result<(usize, usize)> {
             Err(e) => {
                 // If we can't initialize CUDA, assume CPU mode.
                 // Log warning?
-                eprintln!("Warning: Failed to initialize CUDA device {}: {:?}", _device_id, e);
+                eprintln!(
+                    "Warning: Failed to initialize CUDA device {}: {:?}",
+                    _device_id, e
+                );
                 Ok((0, 0))
             }
         }

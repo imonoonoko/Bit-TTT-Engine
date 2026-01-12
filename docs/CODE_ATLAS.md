@@ -13,6 +13,17 @@ Structure verified as of Phase 14.
 | **Model** | `src/model.rs` | Bit-Llama architecture definition (Candle). |
 | **Train** | `src/train.rs` | Training loop and configuration. |
 
+### Rust Engine (`crates/rust_engine`)
+High-performance core library. `cortex_rust`.
+
+| Module | File | Description |
+|---|---|---|
+| **Kernels** | `kernels/` | Device operations (CPU/AVX, CUDA). |
+| - `packing.rs` | `PackedTensor` | 1.58-bit quantization logic & storage. |
+| - `cpu.rs` | `BitLinearCpu` | AVX2-optimized forward pass. |
+| **Layers** | `layers/` | NN modules (`BitLinear`, `RMSNorm`, `TTT`). |
+
+
 ### Data Pipeline (`src/data.rs`)
 The `data` command is a dispatcher for subcommands:
 

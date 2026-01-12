@@ -22,7 +22,9 @@ fn main() -> anyhow::Result<()> {
     // Check if nvcc works
     let status = Command::new(&nvcc).arg("--version").output();
     if status.is_err() {
-        println!("cargo:warning=NVCC not found. Skipping CUDA kernel compilation. Using dummy PTX.");
+        println!(
+            "cargo:warning=NVCC not found. Skipping CUDA kernel compilation. Using dummy PTX."
+        );
         std::fs::write(&output_ptx, "")?;
         return Ok(());
     }
@@ -40,7 +42,10 @@ fn main() -> anyhow::Result<()> {
         println!("cargo:warning=Failed to compile CUDA kernel. Check nvcc setup. Using dummy PTX.");
         std::fs::write(&output_ptx, "")?;
     } else {
-        println!("cargo:warning=Successfully compiled CUDA kernel to {:?}", output_ptx);
+        println!(
+            "cargo:warning=Successfully compiled CUDA kernel to {:?}",
+            output_ptx
+        );
     }
 
     Ok(())

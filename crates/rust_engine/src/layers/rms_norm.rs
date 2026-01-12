@@ -10,9 +10,14 @@ pub struct RMSNorm {
 }
 
 impl RMSNorm {
-    pub fn load(dim: usize, eps: f64, vb: VarBuilder, device: &candle_core::Device) -> Result<Self> {
-        let weight =
-            vb.get_with_hints((dim,), "weight", candle_nn::init::DEFAULT_KAIMING_NORMAL)?
+    pub fn load(
+        dim: usize,
+        eps: f64,
+        vb: VarBuilder,
+        device: &candle_core::Device,
+    ) -> Result<Self> {
+        let weight = vb
+            .get_with_hints((dim,), "weight", candle_nn::init::DEFAULT_KAIMING_NORMAL)?
             .to_device(device)?;
         Ok(Self { weight, eps })
     }
