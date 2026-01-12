@@ -24,3 +24,30 @@
 2026-01-12T17:37:15.206769Z  INFO bit_llama::train::training_loop: ✅ Model saved to: pre_demon_test/model.safetensors
 2026-01-12T17:37:15.207249Z  INFO bit_llama::train::training_loop: ✅ Project Config saved to: pre_demon_test/project.json
 2026-01-12T17:37:15.207573Z  INFO bit_llama::train::training_loop: ✅ Model Config saved to: pre_demon_test/config.json
+2026-01-12T19:12:02.747889Z  INFO bit_llama: 🚀 Bit-Llama started.
+2026-01-12T19:49:04.751053Z  INFO bit_llama: 🚀 Bit-Llama started.
+2026-01-12T19:49:04.751432Z  INFO bit_llama::train::training_loop: --- Bit-Llama Training (Pure Rust) ---
+2026-01-12T19:49:04.751436Z  INFO bit_llama::train::training_loop: Config: Dim=64, Layers=2, Context=16, Batch=2
+2026-01-12T19:49:04.751440Z  INFO bit_llama::train::training_loop: Hyperparams: LR=0.0003, Steps=10, Warmup=100, MinLR=0.00001
+2026-01-12T19:49:04.751446Z  INFO bit_llama::train::training_loop: 📊 Model Size: 0.10M Params
+2026-01-12T19:49:04.751454Z  INFO bit_llama::train::training_loop: 💾 Est. VRAM Usage: 513.52 MB (Params: 1.50 + Act: 0.02)
+2026-01-12T19:49:04.751456Z  INFO bit_llama::train::training_loop: Initializing Device...
+2026-01-12T19:49:04.751461Z  INFO bit_llama::train::training_loop: Device initialized: Cpu
+2026-01-12T19:49:04.751547Z  INFO bit_llama::train::training_loop: Loading Tokenizer from: "C:\\Users\\Humin\\.gemini\\antigravity\\scratch\\new-ai-project\\Bit-TTT\\data\\smoke_test\\tokenizer.json"
+2026-01-12T19:49:04.751566Z  WARN bit_llama::train::training_loop: ⚠️ Tokenizer not found! Specific path: "C:\\Users\\Humin\\.gemini\\antigravity\\scratch\\new-ai-project\\Bit-TTT\\data\\smoke_test\\tokenizer.json"
+2026-01-12T19:49:04.751570Z  WARN bit_llama::train::training_loop: ⚠️ Defaulting VOCAB to 16384 (Risk of mismatch!)
+2026-01-12T19:49:04.752278Z  INFO bit_llama::loader: BitLoader: Loading "C:\\Users\\Humin\\.gemini\\antigravity\\scratch\\new-ai-project\\Bit-TTT\\data\\smoke_test\\dummy.u32" (Model: u32, Tokens: 1000)
+2026-01-12T19:49:04.752284Z  INFO bit_llama::train::training_loop: Data Loaded. Total tokens: 1000
+2026-01-12T19:49:04.765671Z  INFO bit_llama::train::training_loop: No checkpoint found. Starting fresh.
+2026-01-12T19:49:04.765681Z  INFO bit_llama::train::training_loop: Model initialized. Varmap Key count: 17
+2026-01-12T19:49:04.765945Z  INFO bit_llama::train::training_loop: Starting Training Loop (Target: 10 steps, Save every 500 steps)...
+2026-01-12T19:49:04.765983Z  INFO bit_llama::train::training_loop: CWD: "C:\\Users\\Humin\\.gemini\\antigravity\\scratch\\new-ai-project\\Bit-TTT"
+2026-01-12T19:49:04.766107Z  INFO bit_llama::train::training_loop: 📁 Output directory: pre_demon_test
+2026-01-12T19:49:04.766358Z  INFO bit_llama::train::training_loop: ✅ Project Config saved to: pre_demon_test/project.json
+2026-01-12T19:49:04.766731Z  INFO bit_llama::train::training_loop: ✅ Model Config saved to: pre_demon_test/config.json
+2026-01-12T19:49:04.770550Z  INFO bit_llama::train::training_loop: ✅ Tokenizer backed up to: pre_demon_test/tokenizer.json (from default path)
+2026-01-12T19:49:04.834903Z  INFO bit_llama::train::training_loop: Step    0 | Loss: 10.0929 | LR: 0.0000000 | 497.51 tok/s
+2026-01-12T19:49:05.366900Z  INFO bit_llama::train::training_loop: Training complete. Saving final model...
+2026-01-12T19:49:05.371295Z  INFO bit_llama::train::training_loop: ✅ Model saved to: pre_demon_test/model.safetensors
+2026-01-12T19:49:05.371499Z  INFO bit_llama::train::training_loop: ✅ Project Config saved to: pre_demon_test/project.json
+2026-01-12T19:49:05.371676Z  INFO bit_llama::train::training_loop: ✅ Model Config saved to: pre_demon_test/config.json

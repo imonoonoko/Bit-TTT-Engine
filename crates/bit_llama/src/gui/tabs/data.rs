@@ -2,9 +2,12 @@ use eframe::egui;
 use std::env;
 use std::process::Command;
 
+use crate::data::preprocess::{self, PreprocessArgs};
 use crate::gui::i18n::{t, t_tooltip, Language};
 use crate::state::ProjectState;
 use crate::vocab::ModelType;
+use glob::glob;
+use std::thread;
 
 pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: Language) {
     ui.heading(t(language, "step1_title"));
@@ -120,33 +123,124 @@ pub fn show_preprocessing(ui: &mut egui::Ui, project: &mut ProjectState, languag
 
     ui.group(|ui| {
         ui.heading(t(language, "dataset_conversion"));
+
+        // 1. Input Pattern (Glob)
+        // 1. Input Pattern (Glob)
+        ui.label(t(language, "input_pattern"));
+        ui.horizontal(|ui| {
+            // Check for changes
+            let response = ui.add(egui::TextEdit::singleline(&mut project.config.input_pattern).desired_width(300.0));
+
+            if ui.button(t(language, "open_folder")).clicked() {
+                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                    let path_str = folder.to_string_lossy().to_string();
+                    project.config.input_pattern = format!("{}/*.jsonl", path_str);
+                    // Force refresh cache
+                    project.matched_file_count = None;
+                }
+            }
+
+            // Performance Logic: Run glob only on change or if cache is missing
+            if response.changed() || project.matched_file_count.is_none() {
+                 if !project.config.input_pattern.is_empty() {
+                     match glob(&project.config.input_pattern) {
+                         Ok(paths) => {
+                             project.matched_file_count = Some(paths.count());
+                         },
+                         Err(_) => {
+                             project.matched_file_count = None;
+                         }
+                     }
+                 } else {
+                     project.matched_file_count = Some(0);
+                 }
+            }
+        });
+
+        // Preview: Matched files (Cached)
+        if let Some(count) = project.matched_file_count {
+             ui.small(format!("{} {}", t(language, "matched_files"), count));
+        } else if !project.config.input_pattern.is_empty() {
+             ui.small(egui::RichText::new("Invalid glob pattern").color(egui::Color32::RED));
+        }
+
+        ui.add_space(5.0);
+
+        // 2. Template Editor
+        ui.checkbox(&mut project.config.use_template, t(language, "enable_template"));
+
+        if project.config.use_template {
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label(t(language, "preset"));
+                    if ui.button(t(language, "load_alpaca")).clicked() {
+                        project.config.template = "User: {{instruction}}\nAI: {{output}}".to_string();
+                    }
+                    if ui.button(t(language, "load_chatml")).clicked() {
+                        project.config.template = "<|im_start|>user\n{{instruction}}<|im_end|>\n<|im_start|>assistant\n{{output}}<|im_end|>".to_string();
+                    }
+                });
+
+                ui.add(
+                    egui::TextEdit::multiline(&mut project.config.template)
+                        .font(egui::TextStyle::Monospace)
+                        .code_editor()
+                        .desired_width(f32::INFINITY)
+                        .desired_rows(4)
+                        .hint_text(t(language, "template_placeholder"))
+                );
+            });
+        }
+
+        ui.add_space(5.0);
+
+        // 3. Start Button (Direct Integration)
         if ui.button(t(language, "start_conversion")).clicked() {
-            let corpus_path = project
-                .path
-                .join("data/corpus.txt")
-                .to_string_lossy()
-                .into_owned();
+            let corpus_path = project.config.input_pattern.clone(); // Now explicit Glob
+
+            // Legacy corpus fallback? No, we enforce Glob now.
+
             let tokenizer_path = project
                 .path
                 .join("data/tokenizer.json")
                 .to_string_lossy()
                 .into_owned();
-            let prefix = project.path.join("data/").to_string_lossy().into_owned();
+            let output_dir = project.path.join("data/").to_path_buf();
 
-            let exe = env::current_exe().unwrap_or_default();
-            let exe_str = exe.to_string_lossy().to_string();
-            project.run_command(
-                &exe_str,
-                &[
-                    "data",
-                    "--input",
-                    &corpus_path,
-                    "--tokenizer",
-                    &tokenizer_path,
-                    "--output-dir",
-                    &prefix,
-                ],
-            );
+            // Construct Args
+            let args = PreprocessArgs {
+                input: corpus_path,
+                tokenizer: tokenizer_path.into(),
+                output_dir,
+                template: if project.config.use_template && !project.config.template.is_empty() {
+                    Some(project.config.template.clone())
+                } else {
+                    None
+                },
+                list_key: None, // Can add UI for this later if needed
+                val_ratio: 0.01,
+                batch_size: 10000,
+            };
+
+            project.is_running = true;
+            project.status_message = "Running Preprocessing...".to_string();
+            project.log("🚀 Starting Universal Preprocessing (Direct Thread)...");
+
+            let tx = project.log_tx.clone();
+
+            // Clone args for thread
+            thread::spawn(move || {
+                match preprocess::run(args) {
+                    Ok(_) => {
+                        tx.send("✅ Processing Complete!".to_string()).unwrap();
+                    }
+                    Err(e) => {
+                        tx.send(format!("❌ Error: {}", e)).unwrap();
+                    }
+                }
+                // Send completion signal to reset UI state
+                let _ = tx.send("<<PREPROCESS_DONE>>".to_string());
+            });
         }
 
         if project.has_dataset {

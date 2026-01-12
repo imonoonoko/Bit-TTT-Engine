@@ -30,6 +30,17 @@ pub struct ProjectConfig {
     pub min_lr: f64,
     pub warmup_steps: usize,
     pub save_interval: usize,
+    // Universal Parser Settings
+    #[serde(default = "default_input_pattern")]
+    pub input_pattern: String,
+    #[serde(default)]
+    pub template: String,
+    #[serde(default)]
+    pub use_template: bool,
+}
+
+fn default_input_pattern() -> String {
+    "data/*.jsonl".to_string()
 }
 
 impl Default for ProjectConfig {
@@ -50,6 +61,9 @@ impl Default for ProjectConfig {
             min_lr: 0.0,
             warmup_steps: 500,
             save_interval: 500,
+            input_pattern: default_input_pattern(),
+            template: "".to_string(),
+            use_template: false,
         }
     }
 }

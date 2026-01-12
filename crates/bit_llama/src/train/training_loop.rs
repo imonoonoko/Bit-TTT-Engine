@@ -142,6 +142,9 @@ pub fn run(args: TrainArgs) -> Result<()> {
         min_lr: args.min_lr,
         warmup_steps: args.warmup_steps,
         save_interval: args.save_interval,
+        input_pattern: "N/A".to_string(),
+        template: "".to_string(),
+        use_template: false,
     };
 
     let config = project_config.to_bit_llama_config(0.1);

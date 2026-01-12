@@ -36,6 +36,9 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
+minijinja = { version = "1.0", features = ["loader"] }
+flate2 = "1.0"
+zstd = "0.13"
 
 [lib]
 path = "src/lib.rs"

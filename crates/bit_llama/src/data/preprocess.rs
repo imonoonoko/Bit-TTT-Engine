@@ -1,20 +1,25 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use byteorder::{LittleEndian, WriteBytesExt};
 use clap::Args;
+use flate2::read::GzDecoder;
+use glob::glob;
 use indicatif::{ProgressBar, ProgressStyle};
+use minijinja::Environment;
 use rand::Rng;
 use rayon::prelude::*;
+use serde_json::Value;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokenizers::Tokenizer;
+use zstd::stream::read::Decoder as ZstdDecoder;
 
 #[derive(Args, Debug, Clone)]
 pub struct PreprocessArgs {
-    /// 入力コーパス (corpus.txt)
+    /// 入力コーパス (Glob pattern e.g. "data/*.jsonl")
     #[arg(long)]
-    pub input: PathBuf,
+    pub input: String,
 
     /// トークナイザー設定 (tokenizer.json)
     #[arg(long)]
@@ -23,6 +28,14 @@ pub struct PreprocessArgs {
     /// 出力ディレクトリ
     #[arg(long)]
     pub output_dir: PathBuf,
+
+    /// Jinja2 Template (e.g. "User: {{instruction}}\nAI: {{output}}")
+    #[arg(long)]
+    pub template: Option<String>,
+
+    /// JSON List Key (for huge JSON arrays)
+    #[arg(long)]
+    pub list_key: Option<String>,
 
     /// 検証データの割合 (0.01 = 1%)
     #[arg(long, default_value_t = 0.01)]
@@ -34,89 +47,129 @@ pub struct PreprocessArgs {
 }
 
 pub fn run(args: PreprocessArgs) -> Result<()> {
-    println!("🚀 Starting Parallel Preprocessing...");
+    println!("🚀 Starting Universal Preprocessing...");
+    println!("   Input Pattern: {}", args.input);
 
-    // 1. トークナイザー読み込み
+    // 1. Setup Tokenizer
     let tokenizer = Tokenizer::from_file(&args.tokenizer)
         .map_err(|e| anyhow::anyhow!("Failed to load tokenizer: {}", e))?;
-
-    // Rayon内から参照するためにArc化
     let tokenizer = Arc::new(tokenizer);
 
-    // 2. 出力ファイルの準備
-    std::fs::create_dir_all(&args.output_dir)?;
-    let train_path = args.output_dir.join("train.u32");
-    let val_path = args.output_dir.join("val.u32");
-
-    let mut train_writer = BufWriter::new(File::create(&train_path)?);
-    let mut val_writer = BufWriter::new(File::create(&val_path)?);
-
-    // 3. 入力ファイルを開く
-    let file = File::open(&args.input).context("Failed to open corpus file")?;
-    let reader = BufReader::new(file);
-
-    // 行数カウント
-    println!("📊 Counting lines for progress bar...");
-    let total_lines = BufReader::new(File::open(&args.input)?).lines().count() as u64;
-
-    let pb = ProgressBar::new(total_lines);
-    pb.set_style(ProgressStyle::default_bar()
-        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} lines ({eta})")
-        .unwrap()
-        .progress_chars("#>-"));
-
-    let mut chunk = Vec::with_capacity(args.batch_size);
-    let mut total_tokens_train = 0usize;
-    let mut total_tokens_val = 0usize;
-
-    // EOSトークンID取得
     let eos_token = "<|endoftext|>";
     let eos_id = tokenizer
         .token_to_id(eos_token)
         .or_else(|| tokenizer.token_to_id("</s>"))
-        .expect("EOS token (<|endoftext|> or </s>) not found in tokenizer.");
-
+        .expect("EOS token (<|endoftext|> or </s>) not found.");
     println!("ℹ️ EOS Token ID: {}", eos_id);
 
-    // 4. バッチ処理ループ
-    for line_result in reader.lines() {
-        let line = line_result?;
-        chunk.push(line);
+    // Setup Jinja Env
+    let mut env = Environment::new();
+    let has_template = if let Some(tmpl) = &args.template {
+        env.add_template("main", tmpl)?;
+        println!("   Template: {}", tmpl);
+        true
+    } else {
+        println!("   Mode: Raw Text (No template)");
+        false
+    };
+    let env = Arc::new(env); // For Rayon sharing if needed (though we stream in main thread mostly)
 
-        if chunk.len() >= args.batch_size {
-            let (t_count, v_count) = process_chunk(
-                &chunk,
-                &tokenizer,
-                &mut train_writer,
-                &mut val_writer,
-                args.val_ratio,
-                eos_id,
-            )?;
+    // 2. Output Setup
+    std::fs::create_dir_all(&args.output_dir)?;
+    let train_path = args.output_dir.join("train.u32");
+    let val_path = args.output_dir.join("val.u32");
+    let mut train_writer = BufWriter::new(File::create(&train_path)?);
+    let mut val_writer = BufWriter::new(File::create(&val_path)?);
 
-            total_tokens_train += t_count;
-            total_tokens_val += v_count;
+    // 3. Glob Expansion
+    let paths: Vec<PathBuf> = glob(&args.input)?.filter_map(Result::ok).collect();
+    if paths.is_empty() {
+        anyhow::bail!("No files found matching input pattern: {}", args.input);
+    }
+    println!("   Found {} files", paths.len());
 
-            pb.inc(chunk.len() as u64);
-            chunk.clear();
+    // 4. Processing Loop
+    let mut chunk = Vec::with_capacity(args.batch_size);
+    let mut total_tokens_train = 0usize;
+    let mut total_tokens_val = 0usize;
+
+    // Progress Bar (Total files)
+    let pb = ProgressBar::new(paths.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} files ({msg})")
+            .unwrap(),
+    );
+
+    for path in paths {
+        pb.set_message(path.file_name().unwrap().to_string_lossy().to_string());
+
+        let reader = open_compressed_file(&path)?;
+        let buffered = BufReader::new(reader);
+
+        // Detect JSONL vs Raw
+        // If template is present, we assume JSONL (each line is JSON object)
+        // or if list_key present, JSON Array.
+        // For now, simpler implementation:
+        // If template is set, try to parse line as JSON. If fail, skip/warn.
+        // If no template, treat as raw text.
+
+        // Handling JSON Array is tricky with line reader.
+        // For "Step 1", let's focus on JSONL / Raw Text lines.
+        // (JSON Array support can be added by a custom Stream iterator later)
+
+        for line_res in buffered.lines() {
+            let line = line_res?;
+            if line.trim().is_empty() { continue; }
+
+            let text_to_process = if has_template {
+                // Parse as JSON
+                match serde_json::from_str::<Value>(&line) {
+                    Ok(json_ctx) => {
+                        // Render Template
+                        match env.get_template("main").unwrap().render(&json_ctx) {
+                            Ok(rendered) => rendered,
+                            Err(_e) => {
+                                // Template error (missing key etc)
+                                // Log warning but verify frequency? For now just skip.
+                                // eprintln!("Template Error: {}", e);
+                                continue;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // JSON Parse Error
+                        // eprintln!("JSON Parse Error: {}", e);
+                        continue;
+                    }
+                }
+            } else {
+                // Raw Text
+                line
+            };
+
+            chunk.push(text_to_process);
+
+            if chunk.len() >= args.batch_size {
+                let env_ref = if has_template { Some(&*env) } else { None };
+                let (t, v) = process_chunk(&chunk, &tokenizer, &mut train_writer, &mut val_writer, args.val_ratio, eos_id, env_ref)?;
+                total_tokens_train += t;
+                total_tokens_val += v;
+                chunk.clear();
+            }
         }
+        pb.inc(1);
     }
 
+    // Flush remaining
     if !chunk.is_empty() {
-        let (t_count, v_count) = process_chunk(
-            &chunk,
-            &tokenizer,
-            &mut train_writer,
-            &mut val_writer,
-            args.val_ratio,
-            eos_id,
-        )?;
-        total_tokens_train += t_count;
-        total_tokens_val += v_count;
-        pb.inc(chunk.len() as u64);
+         let env_ref = if has_template { Some(&*env) } else { None };
+         let (t, v) = process_chunk(&chunk, &tokenizer, &mut train_writer, &mut val_writer, args.val_ratio, eos_id, env_ref)?;
+        total_tokens_train += t;
+        total_tokens_val += v;
     }
 
     pb.finish_with_message("Done");
-
     train_writer.flush()?;
     val_writer.flush()?;
 
@@ -128,6 +181,17 @@ pub fn run(args: PreprocessArgs) -> Result<()> {
     Ok(())
 }
 
+fn open_compressed_file(path: &Path) -> Result<Box<dyn Read + Send>> {
+    let file = File::open(path)?;
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+
+    match ext {
+        "gz" => Ok(Box::new(GzDecoder::new(file))),
+        "zst" => Ok(Box::new(ZstdDecoder::new(file)?)),
+        _ => Ok(Box::new(file)),
+    }
+}
+
 fn process_chunk(
     lines: &[String],
     tokenizer: &Tokenizer,
@@ -135,6 +199,7 @@ fn process_chunk(
     val_writer: &mut BufWriter<File>,
     val_ratio: f64,
     eos_id: u32,
+    env: Option<&Environment>,
 ) -> Result<(usize, usize)> {
     let results: Vec<(Vec<u32>, bool)> = lines
         .par_iter()
@@ -142,7 +207,33 @@ fn process_chunk(
             let mut rng = rand::thread_rng();
             let is_val = rng.gen_bool(val_ratio);
 
-            if let Ok(encoding) = tokenizer.encode(text.as_str(), false) {
+            let text_to_tokenize = if let Some(env) = env {
+                // Try Parse as JSON
+                if let Ok(json_ctx) = serde_json::from_str::<Value>(text) {
+                     // Render Template
+                     match env.get_template("main").and_then(|t| t.render(&json_ctx).map_err(|e| minijinja::Error::from(e))) {
+                         Ok(rendered) => rendered,
+                         Err(_) => {
+                             // Template or Template-lookup error: skip (empty) or raw?
+                             // User wants fault tolerance: skipping is safer than garbage.
+                             String::new()
+                         }
+                     }
+                } else {
+                    // Not valid JSON: skip or raw?
+                    // If template is forced, and it's not JSON, it's noise.
+                    String::new()
+                }
+            } else {
+                // Raw Text Mode
+                text.clone()
+            };
+
+            if text_to_tokenize.is_empty() {
+                 return (vec![], is_val);
+            }
+
+            if let Ok(encoding) = tokenizer.encode(text_to_tokenize.as_str(), false) {
                 (encoding.get_ids().to_vec(), is_val)
             } else {
                 (vec![], is_val)

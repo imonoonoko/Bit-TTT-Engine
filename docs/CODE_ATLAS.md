@@ -31,7 +31,7 @@ The `data` command is a dispatcher for subcommands:
 |---|---|---|
 | `download` | `src/data/download.rs` | Downloads datasets (e.g. Izumi-Lab Japanese sample). Uses `ureq`. |
 | `clean` | `src/data/clean.rs` | Text cleaning (Regex). Removes HTML, URL. |
-| `preprocess`| `src/data/preprocess.rs`| Tokenizes text and converts to `.u32` binary format. Uses `rayon`. |
+| `preprocess`| `src/data/preprocess.rs`| **Universal Parser**: Tokenizes JSONL/Raw via Jinja2 Templates. Supports Glob/Compression. |
 
 ### Tokenizer (`src/vocab.rs`)
 Handles vocabulary training and loading.

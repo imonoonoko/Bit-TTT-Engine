@@ -34,6 +34,9 @@ pub struct ProjectState {
     // Async
     pub download_progress: Arc<Mutex<f32>>,
     pub download_status: Arc<Mutex<String>>,
+
+    // UI Cache (Not persisted)
+    pub matched_file_count: Option<usize>,
 }
 
 // Shared State (for UI updates)
@@ -79,6 +82,7 @@ impl ProjectState {
             status_message: "Ready".to_string(),
             download_progress: Arc::new(Mutex::new(0.0)),
             download_status: Arc::new(Mutex::new(String::new())),
+            matched_file_count: None,
         };
         state.check_files();
         state
@@ -110,6 +114,13 @@ impl ProjectState {
     /// Should be called from the main UI thread.
     pub fn drain_logs(&mut self) {
         while let Ok(msg) = self.log_rx.try_recv() {
+            if msg == "<<PREPROCESS_DONE>>" {
+                self.is_running = false;
+                self.status_message = "Ready".to_string();
+                self.check_files(); // Refresh file status
+                continue;
+            }
+
             self.logs.push_back(msg);
             if self.logs.len() > 1000 {
                 self.logs.pop_front();

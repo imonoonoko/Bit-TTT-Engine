@@ -111,6 +111,22 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (Language::Japanese, "dataset_ready") => "✅ train.u32 準備完了",
         (Language::English, "dataset_ready") => "✅ train.u32 ready",
 
+        // === Universal Parser ===
+        (Language::Japanese, "input_pattern") => "入力パターン (Glob):",
+        (Language::English, "input_pattern") => "Input Pattern (Glob):",
+        (Language::Japanese, "open_folder") => "📁 フォルダ選択",
+        (Language::English, "open_folder") => "📁 Select Folder",
+        (Language::Japanese, "matched_files") => "マッチしたファイル:",
+        (Language::English, "matched_files") => "Matched files:",
+        (Language::Japanese, "enable_template") => "Jinja2テンプレートを使用",
+        (Language::English, "enable_template") => "Enable Jinja2 Template",
+        (Language::Japanese, "template_placeholder") => "User: {{instruction}}\nAI: {{output}}",
+        (Language::English, "template_placeholder") => "User: {{instruction}}\nAI: {{output}}",
+        (Language::Japanese, "load_alpaca") => "🦙 Load Alpaca",
+        (Language::English, "load_alpaca") => "🦙 Load Alpaca",
+        (Language::Japanese, "load_chatml") => "💬 Load ChatML",
+        (Language::English, "load_chatml") => "💬 Load ChatML",
+
         // === Training ===
         (Language::Japanese, "step3_title") => "🧠 ステップ 3: 学習",
         (Language::English, "step3_title") => "🧠 Step 3: Training",
