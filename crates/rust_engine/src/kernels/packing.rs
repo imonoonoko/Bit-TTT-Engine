@@ -59,7 +59,10 @@ impl PackedTensor {
         // 2. Quantize: W_scaled = round(clamp(W / Scale, -1, 1))
         // This maps values to {-1, 0, 1}
         let w_scaled = (tensor / scale as f64)?;
-        let w_quant = w_scaled.round()?.clamp(-1.0, 1.0)?.to_dtype(candle_core::DType::F32)?;
+        let w_quant = w_scaled
+            .round()?
+            .clamp(-1.0, 1.0)?
+            .to_dtype(candle_core::DType::F32)?;
 
         // 3. Flatten and Pack
         let flat = w_quant.flatten_all()?;
