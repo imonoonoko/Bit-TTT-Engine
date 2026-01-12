@@ -78,7 +78,7 @@ impl BitLinearCpu {
                 let j = global_idx % n; // Col Index (Output Feature)
 
                 let mut sum = 0.0f32;
-                let w_row_start = j * ((k + 3) / 4);
+                let w_row_start = j * k.div_ceil(4);
                 let x_row_start = i * k;
 
                 // AVX2 Path
@@ -203,12 +203,12 @@ unsafe fn compute_row_avx2(x_ptr: &[f32], w_ptr: &[u8], num_chunks: usize) -> f3
             // Let's try that.
 
             let mut coeffs = [0.0f32; 8];
-            for b in 0..8 {
+            for (b, coeff) in coeffs.iter_mut().enumerate() {
                 let shift = b * 2;
                 let code = (w_val >> shift) & 0x03;
                 // (code & 1) - (code >> 1)
                 let val = ((code & 1) as i32) - ((code >> 1) as i32);
-                coeffs[b] = val as f32;
+                *coeff = val as f32;
             }
             let w_vec = _mm256_loadu_ps(coeffs.as_ptr());
 

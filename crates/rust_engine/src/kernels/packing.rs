@@ -33,7 +33,7 @@ impl PackedTensor {
         // For Linear layer: [Out, In] -> [Out, In/4]
         // But here we just treat as flat buffer for simplicity in storage,
         // reshape happens in kernel usage if needed.
-        let capacity = (num_elem + 3) / 4;
+        let capacity = num_elem.div_ceil(4);
 
         let tensor = Tensor::from_vec(data, (capacity,), device)?;
 
@@ -65,7 +65,7 @@ impl PackedTensor {
         let flat = w_quant.flatten_all()?;
         let vec = flat.to_vec1::<f32>()?; // CPU copy for packing logic
 
-        let capacity = (num_elem + 3) / 4;
+        let capacity = num_elem.div_ceil(4);
         let mut packed_data = Vec::with_capacity(capacity);
 
         for chunk in vec.chunks(4) {
