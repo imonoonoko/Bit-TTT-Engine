@@ -20,13 +20,13 @@ pub struct TTTLayer {
 }
 
 impl TTTLayer {
-    pub fn load(hidden_dim: usize, inner_lr: f64, vb: VarBuilder) -> Result<Self> {
+    pub fn load(hidden_dim: usize, inner_lr: f64, vb: VarBuilder, device: &candle_core::Device) -> Result<Self> {
         let d_small = hidden_dim / 4;
         Ok(Self {
             hidden_dim,
             d_small,
-            proj_down: BitLinear::load(hidden_dim, d_small, vb.pp("down"))?,
-            proj_up: BitLinear::load(d_small, hidden_dim, vb.pp("up"))?,
+            proj_down: BitLinear::load(hidden_dim, d_small, vb.pp("down"), device)?,
+            proj_up: BitLinear::load(d_small, hidden_dim, vb.pp("up"), device)?,
             inner_lr,
         })
     }

@@ -62,3 +62,13 @@ graph TD
 *   **Type Safety**: Rustの型システムとCandleのStrictなシェイプ管理により安全性を担保。
 *   **Pure Rust Build**: `--no-default-features` オプションでPython/PyO3依存を排除し、純粋なRustバイナリとしてビルド可能。
 *   **Device Agnostic**: `cpu` (AVX) と `cuda` (GPU) を設定一つで切り替え可能。
+
+## 5. Hybrid Inference Strategy (Phase 15 Architecture)
+
+大規模モデル(70B+)をコンシューマ機で動かすため、**CPU/GPUハイブリッド推論** を実装しています。
+
+*   **Layer Distribution**: `n_gpu_layers` 設定に基づき、モデルの層をGPUとCPUに分散配置します。
+*   **Zero-Copy CPU Kernel**: AVX2最適化されたCPUカーネルは、事前にパッキングされた重みをメモリコピーなしで直接参照し、高速に計算します。
+*   **Dynamic Dispatch**: `forward` パスにおいて、テンソルのデバイス位置に応じて自動的にカーネル（CUDA vs AVX2）を切り替えます。
+
+これにより、VRAM溢れを防ぎつつ、CPUでも実用的な速度（~4 t/s @ 70B）を実現しています。

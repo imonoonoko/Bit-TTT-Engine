@@ -61,6 +61,7 @@ impl ProjectConfig {
             hidden_dim: self.model_dim,
             num_layers: self.layers,
             inner_lr,
+            n_gpu_layers: None,
         }
     }
 

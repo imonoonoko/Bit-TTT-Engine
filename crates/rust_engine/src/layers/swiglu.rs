@@ -14,10 +14,10 @@ pub struct SwiGLU {
 }
 
 impl SwiGLU {
-    pub fn load(hidden_dim: usize, intermediate_dim: usize, vb: VarBuilder) -> Result<Self> {
-        let w1 = BitLinear::load(hidden_dim, intermediate_dim, vb.pp("gate_proj"))?;
-        let w2 = BitLinear::load(intermediate_dim, hidden_dim, vb.pp("down_proj"))?;
-        let w3 = BitLinear::load(hidden_dim, intermediate_dim, vb.pp("up_proj"))?;
+    pub fn load(hidden_dim: usize, intermediate_dim: usize, vb: VarBuilder, device: &candle_core::Device) -> Result<Self> {
+        let w1 = BitLinear::load(hidden_dim, intermediate_dim, vb.pp("gate_proj"), device)?;
+        let w2 = BitLinear::load(intermediate_dim, hidden_dim, vb.pp("down_proj"), device)?;
+        let w3 = BitLinear::load(hidden_dim, intermediate_dim, vb.pp("up_proj"), device)?;
         Ok(Self { w1, w2, w3 })
     }
 

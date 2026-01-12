@@ -761,7 +761,7 @@ checksum = "06ccf5ee3532e66868516d9b315f73aec9f34ea1a37ae98514534d458915dbf1"
 dependencies = [
  "byteorder",
  "candle-kernels",
- "cudarc",
+ "cudarc 0.13.9",
  "gemm 0.17.1",
  "half",
  "memmap2",
@@ -1110,11 +1110,16 @@ dependencies = [
  "byteorder",
  "candle-core",
  "candle-nn",
+ "cc",
+ "cudarc 0.10.0",
  "fs2",
+ "glob",
+ "half",
  "libc",
  "memmap2",
  "pyo3",
  "rand 0.8.5",
+ "rayon",
  "serde",
  "serde_json",
  "tokenizers",
@@ -1211,6 +1216,12 @@ dependencies = [
  "nix 0.30.1",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "cudarc"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9395df0cab995685664e79cc35ad6302bf08fb9c5d82301875a183affe1278b1"
 
 [[package]]
 name = "cudarc"
@@ -4970,7 +4981,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "50758486d7941f8b0a636ba7e29455c07071f41590beac1fd307ec893e8db69a"
 dependencies = [
- "cudarc",
+ "cudarc 0.13.9",
  "half",
  "serde",
  "thiserror 1.0.69",

@@ -9,6 +9,9 @@
 pub mod layers;
 pub mod model;
 pub mod python;
+pub mod kernels;
+pub mod device_utils;
+
 
 // Primary public API re-exports
 pub use layers::{BitLinear, RMSNorm, SwiGLU, TTTLayer};

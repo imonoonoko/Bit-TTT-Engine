@@ -1,6 +1,6 @@
 //! BitLlama and Llama - Full model implementation
 
-use candle_core::{DType, Module, Result, Tensor};
+use candle_core::{DType, Device, Module, Result, Tensor};
 use candle_nn::VarBuilder;
 // use fs2::FileExt; // Implicitly used? Or compiler bug. Keeping commented to silence warning.
 use std::path::Path;
@@ -27,17 +27,80 @@ pub struct BitLlama {
 
 impl BitLlama {
     pub fn load(cfg: BitLlamaConfig, vb: VarBuilder) -> Result<Self> {
+        // Determine primary and secondary devices
+        // Ideally, `vb.device()` is the main device (likely GPU if set up that way),
+        // but for hybrid, we usually start with CPU vb and move to GPU.
+        // Let's assume `vb` is on CPU (Safetensors default).
+
+        let main_device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);
+        let cpu_device = Device::Cpu;
+
+        let n_gpu = match cfg.n_gpu_layers {
+            Some(n) => n,
+            None => {
+                // Auto-Config Strategy
+                if main_device.is_cuda() {
+                    match crate::device_utils::get_vram_info(0) {
+                        Ok((free, total)) => {
+                            let possible = cfg.calculate_auto_offload(free);
+                            println!("[Auto-Config] Detected VRAM: {} MB Free / {} MB Total", free / 1024 / 1024, total / 1024 / 1024);
+                            println!("[Auto-Config] Strategy: {} Layers on GPU / {} on CPU. (Safety Margin: 2GB)", possible, cfg.num_layers.saturating_sub(possible));
+                            possible
+                        }
+                        Err(e) => {
+                            eprintln!("[Auto-Config] Failed to detect VRAM: {}. Defaulting to CPU.", e);
+                            0
+                        }
+                    }
+                } else {
+                    0 // CPU mode
+                }
+            }
+        };
+
+
         let embedding = candle_nn::embedding(cfg.vocab_size, cfg.hidden_dim, vb.pp("embed"))?;
+        // Embedding usually stays on GPU (or main device) as it's the entry point.
+        // Or if we want full hybrid flexibility, maybe CPU?
+        // Let's put embedding on main_device for now.
+        // Note: candle_nn::embedding loads weights to vb's device.
+        // We might need to manually move it if vb is CPU and we want GPU.
+        // But `candle_nn::embedding` returns an Embedding struct which holds a Tensor.
+        // We can cast `embedding.embeddings()` to device.
+        // ACTUALLY: `candle_nn::embedding` just wraps the tensor lookup.
+
+        // Let's be explicit:
+        // We will respect `vb`'s device for the loading, but then move layers to their target device.
+        // BUT, `BitLlamaBlock::load` now takes `device` and does `to_device`.
+        // So we just need to determine the target device for each layer.
 
         let mut layers = Vec::new();
         for i in 0..cfg.num_layers {
-            let layer =
-                BitLlamaBlock::load(cfg.hidden_dim, cfg.inner_lr, vb.pp(format!("layers.{}", i)))?;
+            let target_device = if i < n_gpu {
+                &main_device
+            } else {
+                &cpu_device
+            };
+
+            let layer = BitLlamaBlock::load(
+                cfg.hidden_dim,
+                cfg.inner_lr,
+                vb.pp(format!("layers.{}", i)),
+                target_device
+            )?;
             layers.push(layer);
         }
 
-        let norm = RMSNorm::load(cfg.hidden_dim, RMS_NORM_EPS, vb.pp("norm_f"))?;
+        let norm = RMSNorm::load(cfg.hidden_dim, RMS_NORM_EPS, vb.pp("norm_f"), &main_device)?;
         let lm_head = candle_nn::linear_no_bias(cfg.hidden_dim, cfg.vocab_size, vb.pp("lm_head"))?;
+        // lm_head weights to main_device?
+        // candle_nn::linear_no_bias loads to vb device.
+        // We might want to move it.
+        // But `candle_nn::Linear` struct is simple.
+        // Let's re-create it or move weights?
+        // `candle_nn::Linear` fields are public? No, `weight` is private, accessed via `weight()`.
+        // Let's just assume for now we keep it as returned by `linear_no_bias`.
+        // Ideally, the final layer should be on GPU for fast logits.
 
         Ok(Self {
             embedding,
@@ -61,9 +124,35 @@ impl BitLlama {
         let mut h = self.embedding.forward(x)?.squeeze(0)?;
 
         for (i, layer) in self.layers.iter().enumerate() {
-            let (h_new, w_new) = layer.forward(&h, &w_states[i])?;
-            h = h_new;
+            // Hybrid Logic:
+            // Input `h` might be on GPU, Layer might be on CPU.
+            // Check layer device (heuristic: use norm1.weight device)
+            let layer_device = layer.norm1.weight.device();
+
+            // Move input to layer's device if needed
+            let h_device = h.device();
+            let h_in = if h_device.same_device(layer_device) {
+                std::borrow::Cow::Borrowed(&h)
+            } else {
+                std::borrow::Cow::Owned(h.to_device(layer_device)?)
+            };
+
+            // W state also needs to be on correct device
+            let w_state = &w_states[i];
+            let w_device = w_state.device();
+             let w_in = if w_device.same_device(layer_device) {
+                std::borrow::Cow::Borrowed(w_state)
+            } else {
+                std::borrow::Cow::Owned(w_state.to_device(layer_device)?)
+            };
+
+            let (h_new, w_new) = layer.forward(&h_in, &w_in)?;
+
+            // Update w_states[i] with new state (keeping it on layer device for next step?)
+            // Usually state stays where the layer is.
             w_states[i] = w_new;
+
+            h = h_new;
         }
 
         let h_norm = self.norm.forward(&h)?;

@@ -37,7 +37,7 @@ fn main() -> anyhow::Result<()> {
     );
 
     let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
-    let layer = TTTLayer::load(dim, inner_lr, vb)?;
+    let layer = TTTLayer::load(dim, inner_lr, vb, &device)?;
 
     // Create test patterns
     let pattern_a: Vec<f32> = (0..dim).map(|i| i as f32 / dim as f32).collect();

@@ -42,7 +42,7 @@ fuzz_target!(|data: &[u8]| {
     let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
 
     // 3. Load Model
-    let layer = match TTTLayer::load(hidden_dim, inner_lr, vb) {
+    let layer = match TTTLayer::load(hidden_dim, inner_lr, vb, &device) {
         Ok(l) => l,
         Err(_) => return, // Failed to load (should not happen with correct shapes)
     };

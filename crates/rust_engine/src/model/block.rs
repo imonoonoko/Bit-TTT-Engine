@@ -17,12 +17,12 @@ pub struct BitLlamaBlock {
 }
 
 impl BitLlamaBlock {
-    pub fn load(dim: usize, inner_lr: f64, vb: VarBuilder) -> Result<Self> {
-        let norm1 = RMSNorm::load(dim, RMS_NORM_EPS, vb.pp("norm1"))?;
-        let ttt = TTTLayer::load(dim, inner_lr, vb.pp("ttt"))?;
-        let norm2 = RMSNorm::load(dim, RMS_NORM_EPS, vb.pp("norm2"))?;
+    pub fn load(dim: usize, inner_lr: f64, vb: VarBuilder, device: &candle_core::Device) -> Result<Self> {
+        let norm1 = RMSNorm::load(dim, RMS_NORM_EPS, vb.pp("norm1"), device)?;
+        let ttt = TTTLayer::load(dim, inner_lr, vb.pp("ttt"), device)?;
+        let norm2 = RMSNorm::load(dim, RMS_NORM_EPS, vb.pp("norm2"), device)?;
         let mlp_dim = dim * 4;
-        let mlp = SwiGLU::load(dim, mlp_dim, vb.pp("mlp"))?;
+        let mlp = SwiGLU::load(dim, mlp_dim, vb.pp("mlp"), device)?;
 
         Ok(Self {
             norm1,
