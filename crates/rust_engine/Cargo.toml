@@ -21,7 +21,7 @@ byteorder = "1.5.0"
 memmap2 = "0.9.9"
 fs2 = "0.4"
 tracing = "0.1"
-cudarc = { version = "0.10.0", features = ["driver"] }
+cudarc = { version = "0.10.0", features = ["driver"], optional = true }
 half = "2.3"
 rayon = "1.8"
 
@@ -33,4 +33,4 @@ glob = "0.3"
 [features]
 default = ["python"]
 python = ["dep:pyo3"]
-cuda = ["candle-core/cuda", "candle-nn/cuda"]
+cuda = ["candle-core/cuda", "candle-nn/cuda", "dep:cudarc"]
