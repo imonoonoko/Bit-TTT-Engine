@@ -17,25 +17,29 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
         match tab {
             AppTab::Home => { /* Handled by SidePanel */ }
             AppTab::DataPrep => {
-                let project = app.current_project.as_mut().unwrap();
-                tabs::data::show_data_prep(ui, project, lang);
+                if let Some(project) = app.current_project.as_mut() {
+                    tabs::data::show_data_prep(ui, project, lang);
+                }
             }
             AppTab::Preprocessing => {
-                let project = app.current_project.as_mut().unwrap();
-                tabs::data::show_preprocessing(ui, project, lang);
+                if let Some(project) = app.current_project.as_mut() {
+                    tabs::data::show_preprocessing(ui, project, lang);
+                }
             }
             AppTab::Training => {
-                let project = app.current_project.as_mut().unwrap();
-                tabs::training::show(ui, project, &mut app.training_graph, lang, |new_tab| {
-                    app.tab = new_tab
-                });
+                if let Some(project) = app.current_project.as_mut() {
+                    tabs::training::show(ui, project, &mut app.training_graph, lang, |new_tab| {
+                        app.tab = new_tab
+                    });
+                }
             }
             AppTab::Inference => super::tabs::inference::render(app, ui),
             AppTab::Settings => {
-                let project = app.current_project.as_mut().unwrap();
-                tabs::settings::show(ui, project, lang, &mut app.current_preset, |new_tab| {
-                    app.tab = new_tab
-                });
+                if let Some(project) = app.current_project.as_mut() {
+                    tabs::settings::show(ui, project, lang, &mut app.current_preset, |new_tab| {
+                        app.tab = new_tab
+                    });
+                }
             }
         }
     });

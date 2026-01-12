@@ -130,6 +130,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
         name: "Training Run".to_string(),
         created_at: chrono::Local::now().to_string(),
         vocab_size,
+        model_type: crate::vocab::ModelType::Unigram,
         val_ratio: 0.05,
         model_dim: args.dim,
         layers: args.layers,

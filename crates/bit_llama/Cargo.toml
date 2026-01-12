@@ -30,9 +30,12 @@ glob = "0.3"
 rayon = "1.8"
 indicatif = "0.17"
 hf-hub = "0.3"
+regex = "1.5"
+ureq = "2.9"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
 
 [lib]
 path = "src/lib.rs"
@@ -44,3 +47,6 @@ path = "src/main.rs"
 [features]
 default = []
 cuda = ["candle-core/cuda", "candle-nn/cuda", "dep:nvml-wrapper"]
+
+[dev-dependencies]
+tempfile = "3.8"

@@ -243,13 +243,12 @@ impl eframe::App for BitStudioApp {
             });
 
         // Main Content
-        if self.current_project.is_some() {
+        if let Some(project) = &mut self.current_project {
             // Log Panel
             egui::TopBottomPanel::bottom("log_panel")
                 .resizable(true)
                 .default_height(150.0)
                 .show(ctx, |ui| {
-                    let project = self.current_project.as_mut().unwrap();
                     ui.heading("📟 Console Logs");
                     egui::ScrollArea::vertical()
                         .stick_to_bottom(true)
@@ -264,7 +263,6 @@ impl eframe::App for BitStudioApp {
 
             // Nav Panel
             egui::TopBottomPanel::top("nav_panel").show(ctx, |ui| {
-                let project = self.current_project.as_mut().unwrap();
                 ui.add_space(5.0);
                 ui.horizontal(|ui| {
                     ui.heading(format!("🚀 {}", project.config.name));
@@ -282,10 +280,10 @@ impl eframe::App for BitStudioApp {
                 ui.add_space(5.0);
                 ui.separator();
                 ui.horizontal(|ui| {
-                    ui.selectable_value(&mut self.tab, AppTab::DataPrep, "1️⃣ Data Prep");
-                    ui.selectable_value(&mut self.tab, AppTab::Preprocessing, "2️⃣ Preprocessing");
-                    ui.selectable_value(&mut self.tab, AppTab::Training, "3️⃣ Training");
-                    ui.selectable_value(&mut self.tab, AppTab::Inference, "4️⃣ Chat (Test)");
+                    ui.selectable_value(&mut self.tab, AppTab::DataPrep, "1. Data Prep");
+                    ui.selectable_value(&mut self.tab, AppTab::Preprocessing, "2. Preprocessing");
+                    ui.selectable_value(&mut self.tab, AppTab::Training, "3. Training");
+                    ui.selectable_value(&mut self.tab, AppTab::Inference, "4. Chat (Test)");
                     ui.selectable_value(&mut self.tab, AppTab::Settings, "⚙ Settings");
                 });
                 ui.add_space(5.0);
@@ -317,41 +315,28 @@ pub fn run() -> Result<(), eframe::Error> {
 
 fn setup_custom_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
-    let font_candidates = if cfg!(target_os = "windows") {
-        vec![
-            "C:/Windows/Fonts/YuGothB.ttc",
-            "C:/Windows/Fonts/msgothic.ttc",
-            "C:/Windows/Fonts/meiryo.ttc",
-            "C:/Windows/Fonts/YuGothic.ttf",
-        ]
-    } else {
-        vec![]
-    };
 
-    let mut font_data: Option<Vec<u8>> = None;
-    for path in font_candidates {
-        if std::path::Path::new(path).exists() {
-            if let Ok(data) = std::fs::read(path) {
-                font_data = Some(data);
-                break;
-            }
-        }
-    }
+    tracing::info!("[GUI] Loading bundled font: NotoSansJP-Regular.ttf");
 
-    if let Some(data) = font_data {
-        fonts
-            .font_data
-            .insert("jp_font".to_owned(), egui::FontData::from_owned(data));
-        fonts
-            .families
-            .entry(egui::FontFamily::Proportional)
-            .or_default()
-            .insert(0, "jp_font".to_owned());
-        fonts
-            .families
-            .entry(egui::FontFamily::Monospace)
-            .or_default()
-            .insert(0, "jp_font".to_owned());
-        ctx.set_fonts(fonts);
-    }
+    // Load bundled font
+    fonts.font_data.insert(
+        "jp_font".to_owned(),
+        egui::FontData::from_static(include_bytes!("../../assets/fonts/NotoSansJP-Regular.ttf")),
+    );
+
+    // Fallback settings (Prioritize Japanese font)
+    fonts
+        .families
+        .entry(egui::FontFamily::Proportional)
+        .or_default()
+        .insert(0, "jp_font".to_owned());
+
+    fonts
+        .families
+        .entry(egui::FontFamily::Monospace)
+        .or_default()
+        .insert(0, "jp_font".to_owned());
+
+    ctx.set_fonts(fonts);
+    tracing::info!("[GUI] Fonts initialized.");
 }

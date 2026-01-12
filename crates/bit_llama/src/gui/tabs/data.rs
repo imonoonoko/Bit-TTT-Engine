@@ -4,6 +4,7 @@ use std::process::Command;
 
 use crate::gui::i18n::{t, t_tooltip, Language};
 use crate::state::ProjectState;
+use crate::vocab::ModelType;
 
 pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: Language) {
     ui.heading(t(language, "step1_title"));
@@ -41,6 +42,22 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
 
     ui.group(|ui| {
         ui.heading(t(language, "train_tokenizer"));
+
+        ui.horizontal(|ui| {
+            ui.label(t(language, "model_type"))
+                .on_hover_text(t_tooltip(language, "model_type"));
+            ui.radio_value(
+                &mut project.config.model_type,
+                ModelType::Unigram,
+                t(language, "model_unigram"),
+            );
+            ui.radio_value(
+                &mut project.config.model_type,
+                ModelType::Bpe,
+                t(language, "model_bpe"),
+            );
+        });
+
         ui.horizontal(|ui| {
             ui.label(t(language, "vocab_size"));
             ui.add(egui::DragValue::new(&mut project.config.vocab_size).clamp_range(100..=65535))
@@ -61,6 +78,11 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
                 .to_string_lossy()
                 .into_owned();
 
+            let model_type_str = match project.config.model_type {
+                ModelType::Bpe => "bpe",
+                ModelType::Unigram => "unigram",
+            };
+
             let exe = env::current_exe().unwrap_or_default();
             let exe_str = exe.to_string_lossy().to_string();
             project.run_command(
@@ -73,6 +95,8 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
                     &vocab_str,
                     "--output",
                     &output_path,
+                    "--model-type",
+                    model_type_str,
                 ],
             );
         }

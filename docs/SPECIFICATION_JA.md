@@ -1,6 +1,8 @@
 # Bit-TTT Engine 技術仕様書
 
-**バージョン**: 1.0.0  
+[![Featured on Orynth](https://orynth.dev/api/badge/bit-ttt-engine?theme=dark&style=default)](https://orynth.dev/projects/bit-ttt-engine)
+
+**バージョン**: 1.0.0
 **最終更新**: 2026-01-11
 
 ---

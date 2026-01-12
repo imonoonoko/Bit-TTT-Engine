@@ -11,6 +11,7 @@ pre_demon_test/
 projects/
 data/
 legacy/
+release_dist/
 
 # Checkpoints and Models
 *.safetensors

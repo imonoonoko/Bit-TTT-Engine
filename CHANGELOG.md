@@ -2,7 +2,8 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-01-11
+## [v0.1.0] - 2026-01-12
+**First Public Prototype Release**
 
 ### Phase C: Optimization & Observability
 

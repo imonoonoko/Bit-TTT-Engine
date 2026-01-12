@@ -1,5 +1,7 @@
 # Bit-TTT Engine アーキテクチャ
 
+[![Featured on Orynth](https://orynth.dev/api/badge/bit-ttt-engine?theme=dark&style=default)](https://orynth.dev/projects/bit-ttt-engine)
+
 ## 1. Core Philosophy (設計思想)
 
 **Bit-TTT** は、「超高効率な推論」と「適応的な学習」の融合を目指すプロジェクトです。
@@ -18,13 +20,13 @@
 graph TD
     A["Python (PyO3)"] -->|Direct Bindings| B["Rust Core Engine"]
     B -->|Candle (SIMD/AVX)| C["CPU / GPU"]
-    
+
     subgraph Rust Core
     D["BitLlama (Model)"]
     E["TTT Layer (Fast Weights)"]
     F["BitLinear (Ternary Weights)"]
     end
-    
+
     B --> D
     D --> E
     D --> F

@@ -1,5 +1,7 @@
 # Bit-TTT Engine への貢献
 
+[![Featured on Orynth](https://orynth.dev/api/badge/bit-ttt-engine?theme=dark&style=default)](https://orynth.dev/projects/bit-ttt-engine)
+
 Bit-TTT Engine への貢献に興味を持っていただきありがとうございます！
 
 ## 🚀 クイックスタート

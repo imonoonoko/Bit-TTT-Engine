@@ -90,6 +90,13 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (Language::Japanese, "tokenizer_ready") => "✅ tokenizer.json 準備完了",
         (Language::English, "tokenizer_ready") => "✅ tokenizer.json ready",
 
+        (Language::Japanese, "model_type") => "モデルタイプ:",
+        (Language::English, "model_type") => "Model Type:",
+        (Language::Japanese, "model_unigram") => "🇯🇵 日本語向き (Unigram)",
+        (Language::English, "model_unigram") => "🌏 Multi-lingual (Unigram)",
+        (Language::Japanese, "model_bpe") => "🇺🇸 標準 (BPE)",
+        (Language::English, "model_bpe") => "🇺🇸 Standard (BPE)",
+
         // === Preprocessing ===
         (Language::Japanese, "step2_title") => "🔢 ステップ 2: 前処理",
         (Language::English, "step2_title") => "🔢 Step 2: Preprocessing",
@@ -200,6 +207,9 @@ pub fn t_tooltip(lang: Language, key: &str) -> &'static str {
 
         (Language::Japanese, "vocab_size") => "トークナイザーの語彙サイズ。\n推奨: 8192〜16384",
         (Language::English, "vocab_size") => "Tokenizer vocabulary size.\nRecommended: 8192-16384.",
+
+        (Language::Japanese, "model_type") => "【Unigram】\n日本語のようにスペース区切りがない言語に最適。\n確率的分割で自然なトークンを作ります。\n\n【BPE】\n英語やコードに最適。\n頻度ベースで文字を結合します。",
+        (Language::English, "model_type") => "【Unigram】\nBest for languages without spaces (Japanese/Chinese).\nUses probability to find best splits.\n\n【BPE】\nBest for English/Code.\nMerges frequent byte pairs.",
 
         // === Hyperparameters ===
         (Language::Japanese, "batch_size") => "1回の更新で処理するサンプル数。\n大きいほど安定・高速だがVRAM消費↑",

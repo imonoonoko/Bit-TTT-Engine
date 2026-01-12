@@ -5,6 +5,7 @@
 use chrono;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
+use crate::vocab::ModelType;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ProjectConfig {
@@ -12,12 +13,15 @@ pub struct ProjectConfig {
     pub created_at: String,
     // Tokenizer Settings
     pub vocab_size: usize,
+    #[serde(default)]
+    pub model_type: ModelType,
     // Dataset Settings
     pub val_ratio: f32, // Reserved for future use
     // Training Architecture
     pub model_dim: usize,
     pub layers: usize,
     pub context_len: usize,
+    #[serde(default)]
     pub n_heads: usize, // Added
     // Training Hyperparameters
     pub batch_size: usize,
@@ -34,6 +38,7 @@ impl Default for ProjectConfig {
             name: "New Project".to_string(),
             created_at: chrono::Local::now().to_string(),
             vocab_size: 8000,
+            model_type: ModelType::Unigram,
             val_ratio: 0.05,
             model_dim: 256,
             layers: 4,        // train_llama.rs default

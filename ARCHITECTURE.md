@@ -1,5 +1,7 @@
 # Bit-TTT Engine Architecture
 
+[![Featured on Orynth](https://orynth.dev/api/badge/bit-ttt-engine?theme=dark&style=default)](https://orynth.dev/projects/bit-ttt-engine)
+
 ## 1. Core Philosophy
 
 **Bit-TTT** aims to bridge the gap between "Ultra-efficient Inference" and "Adaptive Learning".
@@ -18,13 +20,13 @@ The project follows a **Rust-First, Python-Compatible** architecture.
 graph TD
     A["Python (PyO3)"] -->|Direct Bindings| B["Rust Core Engine"]
     B -->|Candle (SIMD/AVX)| C["CPU / GPU"]
-    
+
     subgraph Rust Core
     D["BitLlama (Model)"]
     E["TTT Layer (Fast Weights)"]
     F["BitLinear (Ternary Weights)"]
     end
-    
+
     B --> D
     D --> E
     D --> F

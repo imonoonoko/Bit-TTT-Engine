@@ -1,6 +1,8 @@
 # Bit-TTT Engine Specification
 
-**Version**: 1.0.0  
+[![Featured on Orynth](https://orynth.dev/api/badge/bit-ttt-engine?theme=dark&style=default)](https://orynth.dev/projects/bit-ttt-engine)
+
+**Version**: 1.0.0
 **Last Updated**: 2026-01-11
 
 ---

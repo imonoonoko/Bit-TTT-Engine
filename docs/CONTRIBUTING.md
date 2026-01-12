@@ -1,5 +1,7 @@
 # Contributing to Bit-TTT Engine
 
+[![Featured on Orynth](https://orynth.dev/api/badge/bit-ttt-engine?theme=dark&style=default)](https://orynth.dev/projects/bit-ttt-engine)
+
 Thank you for your interest in contributing to Bit-TTT Engine!
 
 ## 🚀 Quick Start

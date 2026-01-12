@@ -4,12 +4,12 @@
 
 提出された `ARTICLE_DRAFT.md` および `BIT_TTT_SPEC.md` の内容を踏まえ、Bit-TTT プロジェクトを次の段階へ進めるためのロードマップです。
 
-### Phase 14: 日本語能力の獲得と評価 (Japanese Proficiency)
+### Phase 14: 日本語能力の獲得と評価 (Japanese Proficiency) [Complete]
 記事ドラフトにある通り、次は「日本語」に焦点を当てます。
 
-*   **Tokenizerの刷新/拡張**: 既存のLlama系トークナイザーで日本語効率が良いものを採用、あるいは語彙拡張を行います。
-*   **学習データ**: `izumi-lab/llm-japanese-dataset` や `wiki40b-ja` などを用いた学習パイプラインの構築。
-*   **評価**: JGLUE 等の日本語ベンチマークでのスコア計測を実施します。
+*   [x] **Tokenizerの刷新/拡張**: 既存のLlama系トークナイザーで日本語効率が良いものを採用、あるいは語彙拡張を行います。
+*   [x] **学習データ**: `izumi-lab/llm-japanese-dataset` や `wiki40b-ja` などを用いた学習パイプラインの構築。
+*   [x] **評価**: JGLUE 等の日本語ベンチマークでのスコア計測を実施します。
 
 ### Phase 15: 大規模化への挑戦 (Scaling to 7B/70B)
 「70BをVRAM 8GB〜16GBで」という目標に向けた最適化です。
@@ -20,7 +20,7 @@
 ### Phase 16: エコシステムの拡充 (Ecosystem & Usability)
 *   **Chat Template対応**: Llama-3やChatML形式のプロンプトをエンジン側で自動処理する機能を実装します（ユーザーが手動で `<|im_start|>` 等を打たなくて済むように）。
 *   **WASM (WebAssembly) 対応**: Rust + Candle の強みを活かし、ブラウザだけで動作する「Bit-TTT Web」を公開します。
-*   **Tauriアプリの完成**: `ARTICLE_DRAFT.md` で言及されているマスコットアプリの正式リリースを目指します。
+*   [x] **Tauriアプリの完成**: `v0.1.0 (Prototype)` をリリースしました。今後は機能拡充を目指します。
 
 ### Phase 17: 特化型TTTの探求 (Advanced TTT)
 *   **Long Contextの実験**: TTTの「無限のコンテキスト」 を実証するため、本一冊分を読ませて、その内容について質問するデモを作成します。
