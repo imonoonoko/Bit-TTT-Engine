@@ -79,7 +79,7 @@ fn main() -> Result<()> {
         ) // File
         .try_init()
     {
-         eprintln!("Failed to init tracing: {}", e);
+        eprintln!("Failed to init tracing: {}", e);
     }
 
     tracing::info!("🚀 Bit-Llama started.");

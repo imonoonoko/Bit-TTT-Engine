@@ -33,7 +33,7 @@ pub struct ProjectConfig {
     #[serde(default = "default_accum_steps")]
     pub accum_steps: usize, // Gradient Accumulation Steps
     #[serde(default = "default_profile")]
-    pub profile: String,    // "consumer" (8GB) or "server" (24GB+)
+    pub profile: String, // "consumer" (8GB) or "server" (24GB+)
 
     // Universal Parser Settings
     #[serde(default = "default_input_pattern")]
@@ -52,10 +52,18 @@ pub struct ProjectConfig {
 fn default_input_pattern() -> String {
     "data/*".to_string()
 }
-fn default_temp() -> f64 { 0.8 }
-fn default_max_tokens() -> usize { 100 }
-fn default_accum_steps() -> usize { 1 }
-fn default_profile() -> String { "consumer".to_string() }
+fn default_temp() -> f64 {
+    0.8
+}
+fn default_max_tokens() -> usize {
+    100
+}
+fn default_accum_steps() -> usize {
+    1
+}
+fn default_profile() -> String {
+    "consumer".to_string()
+}
 
 impl Default for ProjectConfig {
     fn default() -> Self {

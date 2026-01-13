@@ -1,10 +1,13 @@
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
-use std::sync::mpsc::sync_channel;
-use std::thread;
-use std::io::{Read, Write};
 use anyhow::Result;
 use rayon::prelude::*;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::sync_channel;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
+use std::thread;
 
 pub struct ParallelSampler;
 
@@ -14,7 +17,10 @@ impl ParallelSampler {
         output_path: PathBuf,
         limit_mb: usize,
     ) -> Result<Vec<String>> {
-        println!("⚡ Optimization: Parallel Sampling first {} MB of data...", limit_mb);
+        println!(
+            "⚡ Optimization: Parallel Sampling first {} MB of data...",
+            limit_mb
+        );
 
         let limit_bytes = limit_mb * 1_024 * 1_024;
 
@@ -41,43 +47,51 @@ impl ParallelSampler {
         // 2. Reader Threads (Producers)
         let global_bytes = Arc::new(AtomicUsize::new(0));
 
-        files.par_iter().try_for_each_with(tx, |s, path_str| -> Result<()> {
-            // Early exit check (Relaxed is fine for rough limit)
-            if global_bytes.load(Ordering::Relaxed) >= limit_bytes {
-                return Ok(());
-            }
+        files
+            .par_iter()
+            .try_for_each_with(tx, |s, path_str| -> Result<()> {
+                // Early exit check (Relaxed is fine for rough limit)
+                if global_bytes.load(Ordering::Relaxed) >= limit_bytes {
+                    return Ok(());
+                }
 
-            let path = Path::new(path_str);
-            if let Ok(f) = std::fs::File::open(path) {
-                let mut reader = std::io::BufReader::with_capacity(1024 * 1024, f);
-                let mut buffer = [0u8; 1024 * 1024]; // 1MB Chunk
+                let path = Path::new(path_str);
+                if let Ok(f) = std::fs::File::open(path) {
+                    let mut reader = std::io::BufReader::with_capacity(1024 * 1024, f);
+                    let mut buffer = [0u8; 1024 * 1024]; // 1MB Chunk
 
-                loop {
-                    // Check global limit inside loop for large files (Atomic Relaxed is cheap)
-                    if global_bytes.load(Ordering::Relaxed) >= limit_bytes {
-                        break;
-                    }
-
-                    match reader.read(&mut buffer) {
-                        Ok(0) => break, // EOF
-                        Ok(n) => {
-                             if s.send(buffer[..n].to_vec()).is_err() {
-                                 break; // Channel closed
-                             }
-                             global_bytes.fetch_add(n, Ordering::Relaxed);
+                    loop {
+                        // Check global limit inside loop for large files (Atomic Relaxed is cheap)
+                        if global_bytes.load(Ordering::Relaxed) >= limit_bytes {
+                            break;
                         }
-                        Err(_) => break, // Read error
+
+                        match reader.read(&mut buffer) {
+                            Ok(0) => break, // EOF
+                            Ok(n) => {
+                                if s.send(buffer[..n].to_vec()).is_err() {
+                                    break; // Channel closed
+                                }
+                                global_bytes.fetch_add(n, Ordering::Relaxed);
+                            }
+                            Err(_) => break, // Read error
+                        }
                     }
                 }
-            }
-            Ok(())
-        })?;
+                Ok(())
+            })?;
 
         // Channels are dropped here, Writer thread will finish when empty
 
-        let written = writer_handle.join().map_err(|_| anyhow::anyhow!("Writer thread panicked"))??;
+        let written = writer_handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("Writer thread panicked"))??;
 
-        println!("   Sample created: {:?} ({} MB)", output_path, written / 1_024 / 1_024);
+        println!(
+            "   Sample created: {:?} ({} MB)",
+            output_path,
+            written / 1_024 / 1_024
+        );
         Ok(vec![output_path.to_string_lossy().to_string()])
     }
 }

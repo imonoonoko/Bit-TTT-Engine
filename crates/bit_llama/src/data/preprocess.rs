@@ -85,13 +85,16 @@ pub fn run(args: PreprocessArgs) -> Result<()> {
     let paths_all: Vec<PathBuf> = glob(&args.input)?.filter_map(Result::ok).collect();
     // Filter only supported extensions, because glob crate doesn't support {ext,ext}
     let valid_exts = ["json", "jsonl", "txt", "md"];
-    let paths: Vec<PathBuf> = paths_all.into_iter().filter(|p| {
-        if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
-            valid_exts.contains(&ext)
-        } else {
-            false
-        }
-    }).collect();
+    let paths: Vec<PathBuf> = paths_all
+        .into_iter()
+        .filter(|p| {
+            if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
+                valid_exts.contains(&ext)
+            } else {
+                false
+            }
+        })
+        .collect();
     if paths.is_empty() {
         anyhow::bail!("No files found matching input pattern: {}", args.input);
     }
@@ -106,12 +109,19 @@ pub fn run(args: PreprocessArgs) -> Result<()> {
     let pb = ProgressBar::new(paths.len() as u64);
     pb.set_style(
         ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} files ({msg})")
+            .template(
+                "{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} files ({msg})",
+            )
             .unwrap(),
     );
 
     for path in paths {
-        pb.set_message(path.file_name().unwrap_or_default().to_string_lossy().to_string());
+        pb.set_message(
+            path.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
+        );
 
         let reader = open_compressed_file(&path)?;
         let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
@@ -124,54 +134,71 @@ pub fn run(args: PreprocessArgs) -> Result<()> {
             for val_res in stream {
                 match val_res {
                     Ok(val) => {
-                       match val {
-                           Value::Array(arr) => {
-                               // Flatten array
-                               for item in arr {
-                                   chunk.push(item.to_string());
-                                   if chunk.len() >= args.batch_size {
-                                       let env_ref = if has_template { Some(&*env) } else { None };
-                                       let (t, v) = process_chunk(&chunk, &tokenizer, &mut train_writer, &mut val_writer, args.val_ratio, eos_id, env_ref)?;
-                                       total_tokens_train += t;
-                                       total_tokens_val += v;
-                                       chunk.clear();
-                                   }
-                               }
-                           },
-                           _ => {
-                               // Single Object
-                               chunk.push(val.to_string());
-                               if chunk.len() >= args.batch_size {
-                                   let env_ref = if has_template { Some(&*env) } else { None };
-                                   let (t, v) = process_chunk(&chunk, &tokenizer, &mut train_writer, &mut val_writer, args.val_ratio, eos_id, env_ref)?;
-                                   total_tokens_train += t;
-                                   total_tokens_val += v;
-                                   chunk.clear();
-                               }
-                           }
-                       }
-                    },
+                        match val {
+                            Value::Array(arr) => {
+                                // Flatten array
+                                for item in arr {
+                                    chunk.push(item.to_string());
+                                    if chunk.len() >= args.batch_size {
+                                        let env_ref = if has_template { Some(&*env) } else { None };
+                                        let (t, v) = process_chunk(
+                                            &chunk,
+                                            &tokenizer,
+                                            &mut train_writer,
+                                            &mut val_writer,
+                                            args.val_ratio,
+                                            eos_id,
+                                            env_ref,
+                                        )?;
+                                        total_tokens_train += t;
+                                        total_tokens_val += v;
+                                        chunk.clear();
+                                    }
+                                }
+                            }
+                            _ => {
+                                // Single Object
+                                chunk.push(val.to_string());
+                                if chunk.len() >= args.batch_size {
+                                    let env_ref = if has_template { Some(&*env) } else { None };
+                                    let (t, v) = process_chunk(
+                                        &chunk,
+                                        &tokenizer,
+                                        &mut train_writer,
+                                        &mut val_writer,
+                                        args.val_ratio,
+                                        eos_id,
+                                        env_ref,
+                                    )?;
+                                    total_tokens_train += t;
+                                    total_tokens_val += v;
+                                    chunk.clear();
+                                }
+                            }
+                        }
+                    }
                     Err(e) => {
                         eprintln!("JSON Error in {:?}: {}", path, e);
                     }
                 }
             }
-
         } else {
-             // Line-based Mode (JSONL / TXT)
+            // Line-based Mode (JSONL / TXT)
             let buffered = BufReader::new(reader);
             for line_res in buffered.lines() {
                 let line = line_res?;
-                if line.trim().is_empty() { continue; }
+                if line.trim().is_empty() {
+                    continue;
+                }
 
                 let text_to_process = if has_template {
                     if let Ok(_) = serde_json::from_str::<Value>(&line) {
-                         // Render Template (Early render check not needed if we re-parse in process_chunk,
-                         // but currently process_chunk re-parses.
-                         // To avoid double parsing inefficiency we *could* pass Value,
-                         // but to keep signature simple we pass String.
-                         // Optimization: For JSONL we pass line as is? Yes.
-                         line
+                        // Render Template (Early render check not needed if we re-parse in process_chunk,
+                        // but currently process_chunk re-parses.
+                        // To avoid double parsing inefficiency we *could* pass Value,
+                        // but to keep signature simple we pass String.
+                        // Optimization: For JSONL we pass line as is? Yes.
+                        line
                     } else {
                         // Not JSON? Skip?
                         continue;
@@ -184,7 +211,15 @@ pub fn run(args: PreprocessArgs) -> Result<()> {
 
                 if chunk.len() >= args.batch_size {
                     let env_ref = if has_template { Some(&*env) } else { None };
-                    let (t, v) = process_chunk(&chunk, &tokenizer, &mut train_writer, &mut val_writer, args.val_ratio, eos_id, env_ref)?;
+                    let (t, v) = process_chunk(
+                        &chunk,
+                        &tokenizer,
+                        &mut train_writer,
+                        &mut val_writer,
+                        args.val_ratio,
+                        eos_id,
+                        env_ref,
+                    )?;
                     total_tokens_train += t;
                     total_tokens_val += v;
                     chunk.clear();
@@ -196,8 +231,16 @@ pub fn run(args: PreprocessArgs) -> Result<()> {
 
     // Flush remaining
     if !chunk.is_empty() {
-         let env_ref = if has_template { Some(&*env) } else { None };
-         let (t, v) = process_chunk(&chunk, &tokenizer, &mut train_writer, &mut val_writer, args.val_ratio, eos_id, env_ref)?;
+        let env_ref = if has_template { Some(&*env) } else { None };
+        let (t, v) = process_chunk(
+            &chunk,
+            &tokenizer,
+            &mut train_writer,
+            &mut val_writer,
+            args.val_ratio,
+            eos_id,
+            env_ref,
+        )?;
         total_tokens_train += t;
         total_tokens_val += v;
     }
@@ -243,15 +286,18 @@ fn process_chunk(
             let text_to_tokenize = if let Some(env) = env {
                 // Try Parse as JSON
                 if let Ok(json_ctx) = serde_json::from_str::<Value>(text) {
-                     // Render Template
-                     match env.get_template("main").and_then(|t| t.render(&json_ctx).map_err(|e| minijinja::Error::from(e))) {
-                         Ok(rendered) => rendered,
-                         Err(_) => {
-                             // Template or Template-lookup error: skip (empty) or raw?
-                             // User wants fault tolerance: skipping is safer than garbage.
-                             String::new()
-                         }
-                     }
+                    // Render Template
+                    match env
+                        .get_template("main")
+                        .and_then(|t| t.render(&json_ctx).map_err(|e| minijinja::Error::from(e)))
+                    {
+                        Ok(rendered) => rendered,
+                        Err(_) => {
+                            // Template or Template-lookup error: skip (empty) or raw?
+                            // User wants fault tolerance: skipping is safer than garbage.
+                            String::new()
+                        }
+                    }
                 } else {
                     // Not valid JSON: skip or raw?
                     // If template is forced, and it's not JSON, it's noise.
@@ -263,7 +309,7 @@ fn process_chunk(
             };
 
             if text_to_tokenize.is_empty() {
-                 return (vec![], is_val);
+                return (vec![], is_val);
             }
 
             if let Ok(encoding) = tokenizer.encode(text_to_tokenize.as_str(), false) {

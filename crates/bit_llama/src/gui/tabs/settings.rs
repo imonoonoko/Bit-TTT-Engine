@@ -159,15 +159,25 @@ pub fn show(
 
         ui.add_space(10.0);
         ui.heading("Inference Settings"); // TODO: i18n
-        egui::Grid::new("inference_grid").striped(true).show(ui, |ui| {
-            ui.label("Temperature");
-            ui.add(egui::DragValue::new(&mut project.config.inference_temp).speed(0.01).clamp_range(0.0..=2.0));
-            ui.end_row();
+        egui::Grid::new("inference_grid")
+            .striped(true)
+            .show(ui, |ui| {
+                ui.label("Temperature");
+                ui.add(
+                    egui::DragValue::new(&mut project.config.inference_temp)
+                        .speed(0.01)
+                        .clamp_range(0.0..=2.0),
+                );
+                ui.end_row();
 
-            ui.label("Max Tokens");
-            ui.add(egui::DragValue::new(&mut project.config.inference_max_tokens).speed(10).clamp_range(1..=2048));
-            ui.end_row();
-        });
+                ui.label("Max Tokens");
+                ui.add(
+                    egui::DragValue::new(&mut project.config.inference_max_tokens)
+                        .speed(10)
+                        .clamp_range(1..=2048),
+                );
+                ui.end_row();
+            });
 
         ui.add_space(10.0);
         let (vram_gb, msg, color) = project.config.estimate_vram_usage();

@@ -1,10 +1,13 @@
+use glob::glob;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::sync::mpsc::Sender;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::thread;
-use glob::glob;
 
 pub struct Concatenator {
     pub input_pattern: String,
@@ -50,14 +53,16 @@ impl Concatenator {
                             for entry in paths {
                                 // Check Cancel
                                 if cancel_flag.load(Ordering::Relaxed) {
-                                    let _ = log_tx.send("🛑 Concatenation Cancelled by User.".to_string());
+                                    let _ = log_tx
+                                        .send("🛑 Concatenation Cancelled by User.".to_string());
                                     let _ = log_tx.send("<<CONCAT_DONE>>".to_string());
                                     return;
                                 }
 
                                 if let Ok(path) = entry {
                                     if path.is_file() {
-                                        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+                                        let ext =
+                                            path.extension().and_then(|s| s.to_str()).unwrap_or("");
                                         let valid_exts = ["txt", "md", "json", "jsonl"];
                                         if valid_exts.contains(&ext) {
                                             if let Ok(mut in_file) = fs::File::open(&path) {
@@ -66,14 +71,18 @@ impl Concatenator {
                                                         total_bytes += bytes as usize;
                                                     }
                                                     Err(e) => {
-                                                        let _ = log_tx.send(format!("Write error: {}", e));
+                                                        let _ = log_tx
+                                                            .send(format!("Write error: {}", e));
                                                     }
                                                 }
                                                 let _ = out_file.write_all(b"\n");
                                                 count += 1;
 
                                                 if count % 100 == 0 {
-                                                     let _ = log_tx.send(format!("Processed {} files...", count));
+                                                    let _ = log_tx.send(format!(
+                                                        "Processed {} files...",
+                                                        count
+                                                    ));
                                                 }
                                             }
                                         }
@@ -89,22 +98,22 @@ impl Concatenator {
                             let _ = log_tx.send(format!("❌ Failed to create output file: {}", e));
                         }
                     }
-                },
+                }
                 Err(e) => {
                     let _ = log_tx.send(format!("❌ Glob pattern error: {}", e));
                 }
             }
 
             if count == 0 {
-                 let _ = log_tx.send(format!("⚠️ No .txt or .md matches for '{}'", pattern));
+                let _ = log_tx.send(format!("⚠️ No .txt or .md matches for '{}'", pattern));
             } else {
-                 let _ = log_tx.send(format!(
+                let _ = log_tx.send(format!(
                     "✅ Concatenated {} files in {:.2} MB.",
                     count,
                     total_bytes as f64 / 1_048_576.0
                 ));
             }
-             let _ = log_tx.send("<<CONCAT_DONE>>".to_string());
+            let _ = log_tx.send("<<CONCAT_DONE>>".to_string());
         });
     }
 }

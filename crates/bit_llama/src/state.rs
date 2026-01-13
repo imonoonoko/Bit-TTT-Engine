@@ -277,9 +277,9 @@ impl ProjectState {
 
         let raw_dir = self.path.join("raw");
         if !raw_dir.exists() {
-             self.log(&format!("❌ 'raw' directory not found at: {:?}", raw_dir));
-             self.is_running = false;
-             return;
+            self.log(&format!("❌ 'raw' directory not found at: {:?}", raw_dir));
+            self.is_running = false;
+            return;
         }
 
         let output_path = self.path.join("data/corpus.txt");
@@ -294,7 +294,8 @@ impl ProjectState {
             output_path,
             self.concat_cancel_flag.clone(),
             self.log_tx.clone(),
-        ).run();
+        )
+        .run();
     }
 
     pub fn cancel_concat(&self) {

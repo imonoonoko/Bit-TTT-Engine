@@ -53,16 +53,26 @@ pub fn render(app: &mut BitStudioApp, ui: &mut egui::Ui) {
             if session.is_active() {
                 // Settings Controls
                 if let Some(proj) = &mut app.current_project {
-                     ui.label("Temp:");
-                     if ui.add(egui::DragValue::new(&mut proj.config.inference_temp).speed(0.01).clamp_range(0.0..=2.0)).changed() {
-                         let cmd = format!("/temp {:.2}", proj.config.inference_temp);
-                         session.send_message(&cmd);
-                     }
-                     ui.label("Len:");
-                     if ui.add(egui::DragValue::new(&mut proj.config.inference_max_tokens).speed(10)).changed() {
-                         let cmd = format!("/len {}", proj.config.inference_max_tokens);
-                         session.send_message(&cmd);
-                     }
+                    ui.label("Temp:");
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut proj.config.inference_temp)
+                                .speed(0.01)
+                                .clamp_range(0.0..=2.0),
+                        )
+                        .changed()
+                    {
+                        let cmd = format!("/temp {:.2}", proj.config.inference_temp);
+                        session.send_message(&cmd);
+                    }
+                    ui.label("Len:");
+                    if ui
+                        .add(egui::DragValue::new(&mut proj.config.inference_max_tokens).speed(10))
+                        .changed()
+                    {
+                        let cmd = format!("/len {}", proj.config.inference_max_tokens);
+                        session.send_message(&cmd);
+                    }
                 }
 
                 if ui.button("⏹ Unload Model").clicked() {
@@ -117,7 +127,11 @@ pub fn render(app: &mut BitStudioApp, ui: &mut egui::Ui) {
 
                             let path_str = target_path.to_string_lossy().to_string();
 
-                            match session.spawn(&path_str, proj.config.inference_temp, proj.config.inference_max_tokens) {
+                            match session.spawn(
+                                &path_str,
+                                proj.config.inference_temp,
+                                proj.config.inference_max_tokens,
+                            ) {
                                 Ok(_) => {
                                     app.chat_history.push(ChatMessage {
                                         role: "System".to_string(),

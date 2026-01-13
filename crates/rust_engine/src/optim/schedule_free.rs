@@ -1,6 +1,5 @@
 use candle_core::{Result, Tensor, Var};
 
-
 #[derive(Debug, Clone)]
 pub struct ParamsScheduleFree {
     pub lr: f64,
@@ -126,7 +125,7 @@ impl ScheduleFreeOptimizer {
         Ok(())
     }
 
-    pub fn step(&mut self, grads: &Vec<Tensor>) -> Result<()> {
+    pub fn step(&mut self, grads: &[Tensor]) -> Result<()> {
         self.step += 1;
         let k = self.step as f64;
 
@@ -142,7 +141,7 @@ impl ScheduleFreeOptimizer {
         // This is safe if b is not tiny. Default 0.9.
 
         for (i, var) in self.vars.iter().enumerate() {
-             if let Some(grad) = grads.get(i) {
+            if let Some(grad) = grads.get(i) {
                 let z_i = &self.z[i];
                 let y_i = var.as_tensor(); // This is 'y'
 
@@ -170,13 +169,17 @@ impl ScheduleFreeOptimizer {
                 // 4. Store State
                 self.z[i] = z_new;
                 var.set(&x_new)?; // Model weights now hold 'x_new' (c)
-             }
+            }
         }
 
         Ok(())
     }
 
     // Boilerplate
-    pub fn learning_rate(&self) -> f64 { self.params.lr }
-    pub fn set_learning_rate(&mut self, lr: f64) { self.params.lr = lr; }
+    pub fn learning_rate(&self) -> f64 {
+        self.params.lr
+    }
+    pub fn set_learning_rate(&mut self, lr: f64) {
+        self.params.lr = lr;
+    }
 }

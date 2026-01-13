@@ -83,7 +83,10 @@ fn prepare_files(args: &VocabArgs) -> Result<Vec<String>> {
         files
     };
     if let Some(limit_mb) = args.limit_mb {
-        let sample_path = Path::new(&args.output).parent().unwrap().join("corpus_sample.txt");
+        let sample_path = Path::new(&args.output)
+            .parent()
+            .unwrap()
+            .join("corpus_sample.txt");
         return ParallelSampler::sample(files_to_train, sample_path, limit_mb);
     }
 

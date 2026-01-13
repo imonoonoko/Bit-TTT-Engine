@@ -219,7 +219,6 @@ pub fn run(args: TrainArgs) -> Result<()> {
     // Gradient Accumulator Buffer (Matches optim_vars order)
     let mut grad_accumulator: Vec<Option<Tensor>> = vec![None; optim_vars.len()];
 
-
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     let ctrl_c_count = Arc::new(AtomicUsize::new(0));
@@ -348,7 +347,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
         // Schedule-Free: Pre-step (Interpolate y)
         // Only needed at start of accumulation cycle
         if step % accumulation_steps == 0 {
-             optimizer.pre_step()?;
+            optimizer.pre_step()?;
         }
 
         let (inputs, targets) = loader.next_batch(args.batch_size, args.context_len, &device)?;
@@ -440,9 +439,9 @@ pub fn run(args: TrainArgs) -> Result<()> {
                 match opt {
                     Some(t) => final_grads.push(t.clone()),
                     None => {
-                         // Create zero tensor matching var shape
-                         let shape = optim_vars[i].shape();
-                         final_grads.push(Tensor::zeros(shape, DType::F32, &device)?);
+                        // Create zero tensor matching var shape
+                        let shape = optim_vars[i].shape();
+                        final_grads.push(Tensor::zeros(shape, DType::F32, &device)?);
                     }
                 }
             }

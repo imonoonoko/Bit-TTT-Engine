@@ -32,17 +32,28 @@ pub fn show(
             egui::ComboBox::from_id_source("profile_selector")
                 .selected_text(&project.config.profile)
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut project.config.profile, "consumer".to_string(), "Consumer (8GB VRAM)");
-                    ui.selectable_value(&mut project.config.profile, "server".to_string(), "Server (24GB+ VRAM)");
+                    ui.selectable_value(
+                        &mut project.config.profile,
+                        "consumer".to_string(),
+                        "Consumer (8GB VRAM)",
+                    );
+                    ui.selectable_value(
+                        &mut project.config.profile,
+                        "server".to_string(),
+                        "Server (24GB+ VRAM)",
+                    );
                 });
         });
 
         // Accumulation Steps
         ui.horizontal(|ui| {
-             ui.label("Grad Accumulation:");
-             ui.add(egui::Slider::new(&mut project.config.accum_steps, 1..=64));
+            ui.label("Grad Accumulation:");
+            ui.add(egui::Slider::new(&mut project.config.accum_steps, 1..=64));
         });
-        ui.small(format!("Effective Batch: {}", project.config.batch_size * project.config.accum_steps));
+        ui.small(format!(
+            "Effective Batch: {}",
+            project.config.batch_size * project.config.accum_steps
+        ));
 
         // VRAM Estimation Display
         let (vram_mb, status, color) = project.config.estimate_vram_usage();

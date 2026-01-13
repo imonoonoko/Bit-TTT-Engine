@@ -31,21 +31,28 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
     ui.group(|ui| {
         ui.heading(t(language, "concat_corpus"));
 
-        let is_concatenating = project.is_running && project.status_message.contains("Concatenating");
+        let is_concatenating =
+            project.is_running && project.status_message.contains("Concatenating");
 
         if is_concatenating {
-             ui.horizontal(|ui| {
-                 ui.spinner();
-                 ui.label(t(language, "processing")); // Reusing generic processing string or just hardcode for now
-                 if ui.button("🛑 Cancel").clicked() {
-                     project.cancel_concat();
-                 }
-             });
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(t(language, "processing")); // Reusing generic processing string or just hardcode for now
+                if ui.button("🛑 Cancel").clicked() {
+                    project.cancel_concat();
+                }
+            });
         } else {
-             // Disable if other process is running
-             if ui.add_enabled(!project.is_running, egui::Button::new(t(language, "concat_btn"))).clicked() {
+            // Disable if other process is running
+            if ui
+                .add_enabled(
+                    !project.is_running,
+                    egui::Button::new(t(language, "concat_btn")),
+                )
+                .clicked()
+            {
                 project.concat_txt_files();
-             }
+            }
         }
 
         if project.has_corpus {

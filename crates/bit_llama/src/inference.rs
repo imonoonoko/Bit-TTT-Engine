@@ -69,7 +69,7 @@ pub fn run(args: InferenceArgs) -> Result<()> {
         }
 
         if prompt.starts_with("/len ") {
-             if let Ok(v) = prompt["/len ".len()..].parse::<usize>() {
+            if let Ok(v) = prompt["/len ".len()..].parse::<usize>() {
                 current_max_tokens = v;
                 println!("📏 Max length set to {}", current_max_tokens);
             } else {

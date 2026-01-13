@@ -32,6 +32,7 @@ fi
 
 # 任意の品質チェック（必要な場合のみ）
 # 例:
+cargo fmt --all
 # ./scripts/lint.sh && ./scripts/test.sh && ./scripts/build.sh || exit 1
 
 git add -A && \
@@ -49,6 +50,7 @@ if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then \
 fi
 
 # 任意の品質チェック（必要な場合のみ）
+cargo fmt --all
 # ./scripts/quality-check.sh || exit 1
 
 git add -A && git commit -m "$MSG" && git push -u origin "$BRANCH"
@@ -65,7 +67,8 @@ fi
 
 # 2) 任意のローカル品質チェック（必要に応じて追加）
 # 例:
-# echo "品質チェック実行中..."
+echo "品質チェック実行中..."
+cargo fmt --all
 # ./scripts/lint.sh && ./scripts/test.sh && ./scripts/build.sh || exit 1
 
 # 3) 変更をステージング
