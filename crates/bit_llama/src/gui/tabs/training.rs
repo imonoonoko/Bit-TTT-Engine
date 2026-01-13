@@ -61,19 +61,25 @@ pub fn show(
         ui.add_space(5.0);
         ui.heading(t(language, "vram_efficiency"));
 
-        egui::Grid::new("vram_metrics").num_columns(2).show(ui, |ui| {
-            ui.label("FP16 (Inference):");
-            ui.label(format!("{:.0} MB", eff.fp16_mb));
-            ui.end_row();
+        egui::Grid::new("vram_metrics")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("FP16 (Inference):");
+                ui.label(format!("{:.0} MB", eff.fp16_mb));
+                ui.end_row();
 
-            ui.label("Bit-TTT (Yours):");
-            ui.colored_label(eff.color, format!("{:.0} MB", eff.bit_ttt_mb));
-            ui.end_row();
-        });
+                ui.label("Bit-TTT (Yours):");
+                ui.colored_label(eff.color, format!("{:.0} MB", eff.bit_ttt_mb));
+                ui.end_row();
+            });
 
         // Visual Comparison Bar
         let max_width = ui.available_width();
-        let scale = if eff.fp16_mb > 0.0 { max_width / eff.fp16_mb as f32 } else { 0.0 };
+        let scale = if eff.fp16_mb > 0.0 {
+            max_width / eff.fp16_mb as f32
+        } else {
+            0.0
+        };
 
         let fp16_width = (eff.fp16_mb as f32 * scale).max(1.0);
         let bit_width = (eff.bit_ttt_mb as f32 * scale).max(1.0);
@@ -96,8 +102,16 @@ pub fn show(
 
         // Savings Badge
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("⚡ SAVED:").strong().color(egui::Color32::YELLOW));
-            ui.label(egui::RichText::new(format!("{:.1} GB", eff.saved_mb / 1024.0)).strong().heading());
+            ui.label(
+                egui::RichText::new("⚡ SAVED:")
+                    .strong()
+                    .color(egui::Color32::YELLOW),
+            );
+            ui.label(
+                egui::RichText::new(format!("{:.1} GB", eff.saved_mb / 1024.0))
+                    .strong()
+                    .heading(),
+            );
             ui.small(format!("({:.1}x Efficiency)", eff.saved_ratio));
         });
 

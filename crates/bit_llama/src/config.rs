@@ -202,7 +202,11 @@ impl ProjectConfig {
             bit_ttt_mb: total_bitttt,
             fp16_mb: total_fp16,
             saved_mb: total_fp16 - total_bitttt,
-            saved_ratio: if total_bitttt > 0.0 { total_fp16 / total_bitttt } else { 0.0 },
+            saved_ratio: if total_bitttt > 0.0 {
+                total_fp16 / total_bitttt
+            } else {
+                0.0
+            },
             status: status.to_string(),
             color,
         }

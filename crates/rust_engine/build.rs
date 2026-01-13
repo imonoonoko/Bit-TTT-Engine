@@ -43,7 +43,10 @@ fn main() -> anyhow::Result<()> {
         if err_str.contains("cl.exe") {
             println!("cargo:warning=NVCC could not find cl.exe (MSVC). CUDA kernels skipped (Non-fatal).");
         } else {
-            println!("cargo:warning=Failed to compile CUDA kernel. Using dummy PTX. Error: {}", err_str);
+            println!(
+                "cargo:warning=Failed to compile CUDA kernel. Using dummy PTX. Error: {}",
+                err_str
+            );
         }
         std::fs::write(&output_ptx, "")?;
     } else {
