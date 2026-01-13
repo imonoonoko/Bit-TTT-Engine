@@ -211,10 +211,7 @@ impl ProjectState {
         self.log(&format!("$ {} {}", cmd, args.join(" ")));
 
         let mut command = Command::new(cmd);
-        command
-            .args(args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        command.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
 
         match command.spawn() {
             Ok(mut child) => {
@@ -226,19 +223,15 @@ impl ProjectState {
 
                 thread::spawn(move || {
                     let reader = BufReader::new(stdout);
-                    for line in reader.lines() {
-                        if let Ok(l) = line {
-                            let _ = tx1.send(l);
-                        }
+                    for l in reader.lines().flatten() {
+                        let _ = tx1.send(l);
                     }
                 });
 
                 thread::spawn(move || {
                     let reader = BufReader::new(stderr);
-                    for line in reader.lines() {
-                        if let Ok(l) = line {
-                            let _ = tx2.send(l);
-                        }
+                    for l in reader.lines().flatten() {
+                        let _ = tx2.send(l);
                     }
                 });
 

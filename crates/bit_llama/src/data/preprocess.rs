@@ -116,12 +116,7 @@ pub fn run(args: PreprocessArgs) -> Result<()> {
     );
 
     for path in paths {
-        pb.set_message(
-            path.file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string(),
-        );
+        pb.set_message(path.file_name().unwrap_or_default().to_string_lossy().to_string());
 
         let reader = open_compressed_file(&path)?;
         let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
@@ -192,7 +187,7 @@ pub fn run(args: PreprocessArgs) -> Result<()> {
                 }
 
                 let text_to_process = if has_template {
-                    if let Ok(_) = serde_json::from_str::<Value>(&line) {
+                    if serde_json::from_str::<Value>(&line).is_ok() {
                         // Render Template (Early render check not needed if we re-parse in process_chunk,
                         // but currently process_chunk re-parses.
                         // To avoid double parsing inefficiency we *could* pass Value,
@@ -289,7 +284,7 @@ fn process_chunk(
                     // Render Template
                     match env
                         .get_template("main")
-                        .and_then(|t| t.render(&json_ctx).map_err(|e| minijinja::Error::from(e)))
+                        .and_then(|t| t.render(&json_ctx))
                     {
                         Ok(rendered) => rendered,
                         Err(_) => {

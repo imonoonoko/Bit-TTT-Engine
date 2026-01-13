@@ -1,0 +1,77 @@
+**********************************************************************
+** Visual Studio 2022 Developer Command Prompt v17.14.23
+** Copyright (c) 2025 Microsoft Corporation
+**********************************************************************
+[vcvarsall.bat] Environment initialized for: 'x64'
+warning: cortex_rust@0.1.0: Successfully compiled CUDA kernel to "C:\\Users\\Humin\\.gemini\\antigravity\\scratch\\new-ai-project\\Bit-TTT\\target\\debug\\build\\cortex_rust-e7e45ff7e898356d\\out\\bit_op.ptx"
+   Compiling cortex_rust v0.1.0 (C:\Users\Humin\.gemini\antigravity\scratch\new-ai-project\Bit-TTT\crates\rust_engine)
+warning: unused import: `DType`
+ --> crates\rust_engine\tests\grad_test.rs:4:39
+  |
+4 |     use candle_core::{Device, Tensor, DType, Result};
+  |                                       ^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> crates\rust_engine\tests\grad_test.rs:64:13
+   |
+64 |         let mut grads_ref = loss_ref.backward()?;
+   |             ----^^^^^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> crates\rust_engine\tests\grad_test.rs:137:13
+    |
+137 |         let mut grads_custom = loss_custom.backward()?;
+    |             ----^^^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `x_var`
+  --> crates\rust_engine\tests\grad_test.rs:32:13
+   |
+32 |         let x_var = candle_core::Var::from_tensor(&x)?;
+   |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_x_var`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `dw_ref`
+  --> crates\rust_engine\tests\grad_test.rs:66:13
+   |
+66 |         let dw_ref = grads_ref.get(&w_var).unwrap();
+   |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_dw_ref`
+
+warning: unused variable: `y_custom`
+  --> crates\rust_engine\tests\grad_test.rs:80:13
+   |
+80 |         let y_custom = x_t.apply_op2(w_t, (*op).clone())?;
+   |             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_y_custom`
+
+warning: `cortex_rust` (test "grad_test") generated 6 warnings (run `cargo fix --test "grad_test" -p cortex_rust` to apply 6 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.36s
+     Running tests\grad_test.rs (C:\Users\Humin\.gemini\antigravity\scratch\new-ai-project\Bit-TTT\target\debug\deps\grad_test-625cd555fd454707.exe)
+
+running 1 test
+test tests::test_backward_correctness ... FAILED
+
+failures:
+
+---- tests::test_backward_correctness stdout ----
+Checking dL/dx...
+Max Diff: 8.457729, Mean Abs A: 10.5859375
+
+thread 'tests::test_backward_correctness' (32028) panicked at crates\rust_engine\tests\grad_test.rs:14:13:
+Assertion failed: diff 8.457729 > tol 0.01
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::test_backward_correctness
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.57s
+
+error: test failed, to rerun pass `--test grad_test`

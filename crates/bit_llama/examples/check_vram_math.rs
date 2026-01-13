@@ -33,21 +33,9 @@ fn print_metrics(label: &str, config: &ProjectConfig) {
     let eff = config.estimate_efficiency();
 
     println!("Scenario: [{}]", label);
-    println!(
-        "  - Bit-TTT Usage : {:.2} MB ({:.2} GB)",
-        eff.bit_ttt_mb,
-        eff.bit_ttt_mb / 1024.0
-    );
-    println!(
-        "  - Standard FP16 : {:.2} MB ({:.2} GB)",
-        eff.fp16_mb,
-        eff.fp16_mb / 1024.0
-    );
-    println!(
-        "  - SAVED VRAM    : {:.2} MB ({:.2} GB)",
-        eff.saved_mb,
-        eff.saved_mb / 1024.0
-    );
+    println!("  - Bit-TTT Usage : {:.2} MB ({:.2} GB)", eff.bit_ttt_mb, eff.bit_ttt_mb / 1024.0);
+    println!("  - Standard FP16 : {:.2} MB ({:.2} GB)", eff.fp16_mb, eff.fp16_mb / 1024.0);
+    println!("  - SAVED VRAM    : {:.2} MB ({:.2} GB)", eff.saved_mb, eff.saved_mb / 1024.0);
     println!("  - Efficiency    : {:.2}x", eff.saved_ratio);
     println!("  - Status        : {}", eff.status);
     println!("--------------------------------------------------");

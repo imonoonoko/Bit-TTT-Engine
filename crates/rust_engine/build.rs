@@ -19,7 +19,13 @@ fn main() -> anyhow::Result<()> {
         Err(_) => PathBuf::from("nvcc"),
     };
 
-    // Check if nvcc works
+    // Check if nvcc works AND if source exists
+    if !std::path::Path::new(cuda_file).exists() {
+        println!("cargo:warning=CUDA source '{}' not found. skipping CUDA kernel compilation.", cuda_file);
+        std::fs::write(&output_ptx, "")?;
+        return Ok(());
+    }
+
     let status = Command::new(&nvcc).arg("--version").output();
     if status.is_err() {
         println!(
@@ -31,8 +37,8 @@ fn main() -> anyhow::Result<()> {
 
     let output = Command::new(&nvcc)
         .arg("-ptx")
-        .arg("-arch=compute_80") // Target Ampere (RTX 30 series+) or adjust
-        .arg("-code=sm_80")
+        .arg("-arch=compute_86") // Target Ampere (RTX 30 series+)
+        .arg("-code=sm_86")
         .arg(cuda_file)
         .arg("-o")
         .arg(&output_ptx)
@@ -40,20 +46,10 @@ fn main() -> anyhow::Result<()> {
 
     if !output.status.success() {
         let err_str = String::from_utf8_lossy(&output.stderr);
-        if err_str.contains("cl.exe") {
-            println!("cargo:warning=NVCC could not find cl.exe (MSVC). CUDA kernels skipped (Non-fatal).");
-        } else {
-            println!(
-                "cargo:warning=Failed to compile CUDA kernel. Using dummy PTX. Error: {}",
-                err_str
-            );
-        }
-        std::fs::write(&output_ptx, "")?;
+        let out_str = String::from_utf8_lossy(&output.stdout); // checking stdout too
+        panic!("NVCC Compilation Failed:\nSTDERR:\n{}\nSTDOUT:\n{}", err_str, out_str);
     } else {
-        println!(
-            "cargo:warning=Successfully compiled CUDA kernel to {:?}",
-            output_ptx
-        );
+        println!("cargo:warning=Successfully compiled CUDA kernel to {:?}", output_ptx);
     }
 
     Ok(())

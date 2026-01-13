@@ -83,10 +83,7 @@ fn prepare_files(args: &VocabArgs) -> Result<Vec<String>> {
         files
     };
     if let Some(limit_mb) = args.limit_mb {
-        let sample_path = Path::new(&args.output)
-            .parent()
-            .unwrap()
-            .join("corpus_sample.txt");
+        let sample_path = Path::new(&args.output).parent().unwrap().join("corpus_sample.txt");
         return ParallelSampler::sample(files_to_train, sample_path, limit_mb);
     }
 
@@ -118,9 +115,7 @@ fn train_bpe(args: VocabArgs) -> Result<()> {
     > = TokenizerImpl::new(BPE::default());
     tokenizer.with_pre_tokenizer(Some(PreTokenizerWrapper::ByteLevel(ByteLevel::default())));
     tokenizer.with_decoder(Some(DecoderWrapper::ByteLevel(ByteLevelDec::default())));
-    tokenizer.with_post_processor(Some(PostProcessorWrapper::ByteLevel(
-        ByteLevelPost::default(),
-    )));
+    tokenizer.with_post_processor(Some(PostProcessorWrapper::ByteLevel(ByteLevelPost::default())));
     tokenizer.with_normalizer(Option::<NormalizerWrapper>::None);
 
     let special_tokens = get_special_tokens();
@@ -132,13 +127,9 @@ fn train_bpe(args: VocabArgs) -> Result<()> {
         .build();
 
     println!("Starting training (BPE)...");
-    tokenizer
-        .train_from_files(&mut trainer, files)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    tokenizer.train_from_files(&mut trainer, files).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    tokenizer
-        .save(&args.output, true)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    tokenizer.save(&args.output, true).map_err(|e| anyhow::anyhow!("{}", e))?;
     println!("✅ Tokenizer saved to {}", args.output);
     println!("📊 Final vocab size: {}", tokenizer.get_vocab_size(true));
     Ok(())
@@ -171,13 +162,9 @@ fn train_unigram(args: VocabArgs) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to build Unigram trainer: {}", e))?;
 
     println!("Starting training (Unigram)...");
-    tokenizer
-        .train_from_files(&mut trainer, files)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    tokenizer.train_from_files(&mut trainer, files).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    tokenizer
-        .save(&args.output, true)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    tokenizer.save(&args.output, true).map_err(|e| anyhow::anyhow!("{}", e))?;
     println!("✅ Tokenizer saved to {}", args.output);
     println!("📊 Final vocab size: {}", tokenizer.get_vocab_size(true));
     Ok(())
@@ -197,10 +184,7 @@ mod tests {
 
         // Create dummy Japanese corpus with mixed characters
         let mut file = std::fs::File::create(&input_path)?;
-        writeln!(
-            file,
-            "昔々あるところに、お爺さんとお婆さんが住んでいました。"
-        )?;
+        writeln!(file, "昔々あるところに、お爺さんとお婆さんが住んでいました。")?;
         writeln!(file, "ＡＢＣａｂｃ１２３")?; // Fullwidth to test NFKC
         writeln!(file, "🍎🍊🍇")?; // Emojis
         writeln!(file, "Kyoto is nice.")?;
@@ -221,9 +205,7 @@ mod tests {
         let tokenizer = Tokenizer::from_file(&output_path).map_err(|e| anyhow::anyhow!(e))?;
 
         // Test Normalization (NFKC: ＡＢＣ -> ABC)
-        let encoding = tokenizer
-            .encode("ＡＢＣ", false)
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let encoding = tokenizer.encode("ＡＢＣ", false).map_err(|e| anyhow::anyhow!(e))?;
         let tokens = encoding.get_tokens();
         println!("Normalized Tokens: {:?}", tokens);
 
@@ -234,12 +216,8 @@ mod tests {
 
         // Test Roundtrip
         let text = "昔々あるところに";
-        let encoded = tokenizer
-            .encode(text, false)
-            .map_err(|e| anyhow::anyhow!(e))?;
-        let decoded = tokenizer
-            .decode(encoded.get_ids(), false)
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let encoded = tokenizer.encode(text, false).map_err(|e| anyhow::anyhow!(e))?;
+        let decoded = tokenizer.decode(encoded.get_ids(), false).map_err(|e| anyhow::anyhow!(e))?;
         // Remove Metaspace underscores (U+2581) for comparison
         assert_eq!(decoded.replace("\u{2581}", ""), text);
 

@@ -30,7 +30,8 @@ impl ModelPreset {
                 config.lr = 5e-4;
                 config.min_lr = 1e-5;
                 config.warmup_steps = 50;
-                config.save_interval = 100;
+                config.save_interval = 500;
+                config.accum_steps = 1;
             }
             ModelPreset::Small => {
                 config.model_dim = 256;
@@ -43,6 +44,7 @@ impl ModelPreset {
                 config.min_lr = 1e-5;
                 config.warmup_steps = 100;
                 config.save_interval = 500;
+                config.accum_steps = 4; // Effective Batch 64
             }
             ModelPreset::Medium => {
                 config.model_dim = 512;
@@ -55,6 +57,7 @@ impl ModelPreset {
                 config.min_lr = 1e-6;
                 config.warmup_steps = 200;
                 config.save_interval = 500;
+                config.accum_steps = 8; // Effective Batch 128
             }
             ModelPreset::Custom => {
                 // Don't modify config for Custom
@@ -88,11 +91,6 @@ impl ModelPreset {
 
     /// All presets for iteration
     pub fn all() -> &'static [ModelPreset] {
-        &[
-            ModelPreset::Tiny,
-            ModelPreset::Small,
-            ModelPreset::Medium,
-            ModelPreset::Custom,
-        ]
+        &[ModelPreset::Tiny, ModelPreset::Small, ModelPreset::Medium, ModelPreset::Custom]
     }
 }

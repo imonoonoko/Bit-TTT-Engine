@@ -20,30 +20,19 @@ fn main() -> anyhow::Result<()> {
     let mut tensors = HashMap::new();
 
     // Initialize with small random-like values using deterministic pattern
-    let down_data: Vec<f32> = (0..(d_small * dim))
-        .map(|i| (i as f32).sin() * 0.1)
-        .collect();
-    let up_data: Vec<f32> = (0..(dim * d_small))
-        .map(|i| (i as f32).cos() * 0.1)
-        .collect();
+    let down_data: Vec<f32> = (0..(d_small * dim)).map(|i| (i as f32).sin() * 0.1).collect();
+    let up_data: Vec<f32> = (0..(dim * d_small)).map(|i| (i as f32).cos() * 0.1).collect();
 
-    tensors.insert(
-        "down.weight".to_string(),
-        Tensor::from_vec(down_data, (d_small, dim), &device)?,
-    );
-    tensors.insert(
-        "up.weight".to_string(),
-        Tensor::from_vec(up_data, (dim, d_small), &device)?,
-    );
+    tensors
+        .insert("down.weight".to_string(), Tensor::from_vec(down_data, (d_small, dim), &device)?);
+    tensors.insert("up.weight".to_string(), Tensor::from_vec(up_data, (dim, d_small), &device)?);
 
     let vb = VarBuilder::from_tensors(tensors, DType::F32, &device);
     let layer = TTTLayer::load(dim, inner_lr, vb, &device)?;
 
     // Create test patterns
     let pattern_a: Vec<f32> = (0..dim).map(|i| i as f32 / dim as f32).collect();
-    let pattern_b: Vec<f32> = (0..dim)
-        .map(|i| (i as f32 / dim as f32) * 2.0 - 1.0)
-        .collect();
+    let pattern_b: Vec<f32> = (0..dim).map(|i| (i as f32 / dim as f32) * 2.0 - 1.0).collect();
 
     let x_a = Tensor::from_vec(pattern_a.clone(), (1, dim), &device)?;
     let x_b = Tensor::from_vec(pattern_b.clone(), (1, dim), &device)?;

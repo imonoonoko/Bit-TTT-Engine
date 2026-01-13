@@ -20,10 +20,7 @@ pub fn run(args: InferenceArgs) -> Result<()> {
     println!("Loading model from: {}", args.model);
 
     let mut llama = Llama::load_auto(&args.model).map_err(|e| {
-        anyhow::anyhow!(
-            "Failed to load model: {}\nEnsure directory contains config.json etc.",
-            e
-        )
+        anyhow::anyhow!("Failed to load model: {}\nEnsure directory contains config.json etc.", e)
     })?;
 
     llama.model.precompute_for_inference()?;

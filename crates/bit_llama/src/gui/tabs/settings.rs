@@ -26,6 +26,40 @@ pub fn show(
                 }
             }
         });
+
+        ui.add_space(5.0);
+        ui.separator();
+
+        // Advanced Profile & Accumulation (Moved from Training Tab)
+        ui.horizontal(|ui| {
+            ui.label("Profile:");
+            egui::ComboBox::from_id_source("profile_selector")
+                .selected_text(&project.config.profile)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut project.config.profile,
+                        "consumer".to_string(),
+                        "Consumer (8GB VRAM)",
+                    );
+                    ui.selectable_value(
+                        &mut project.config.profile,
+                        "server".to_string(),
+                        "Server (24GB+ VRAM)",
+                    );
+                });
+        });
+
+        ui.horizontal(|ui| {
+            ui.label("Grad Accumulation:");
+            if ui.add(egui::DragValue::new(&mut project.config.accum_steps).clamp_range(1..=64)).changed() {
+                 *current_preset = ModelPreset::Custom;
+            }
+        });
+        ui.small(format!(
+            "Effective Batch: {}",
+            project.config.batch_size * project.config.accum_steps
+        ));
+
         ui.label(format!("VRAM: {}", current_preset.vram_estimate()));
     });
 
@@ -159,31 +193,29 @@ pub fn show(
 
         ui.add_space(10.0);
         ui.heading("Inference Settings"); // TODO: i18n
-        egui::Grid::new("inference_grid")
-            .striped(true)
-            .show(ui, |ui| {
-                ui.label("Temperature");
-                ui.add(
-                    egui::DragValue::new(&mut project.config.inference_temp)
-                        .speed(0.01)
-                        .clamp_range(0.0..=2.0),
-                );
-                ui.end_row();
+        egui::Grid::new("inference_grid").striped(true).show(ui, |ui| {
+            ui.label("Temperature");
+            ui.add(
+                egui::DragValue::new(&mut project.config.inference_temp)
+                    .speed(0.01)
+                    .clamp_range(0.0..=2.0),
+            );
+            ui.end_row();
 
-                ui.label("Max Tokens");
-                ui.add(
-                    egui::DragValue::new(&mut project.config.inference_max_tokens)
-                        .speed(10)
-                        .clamp_range(1..=2048),
-                );
-                ui.end_row();
-            });
+            ui.label("Max Tokens");
+            ui.add(
+                egui::DragValue::new(&mut project.config.inference_max_tokens)
+                    .speed(10)
+                    .clamp_range(1..=2048),
+            );
+            ui.end_row();
+        });
 
         ui.add_space(10.0);
         let (vram_gb, msg, color) = project.config.estimate_vram_usage();
         ui.colored_label(
             color,
-            format!("{} {:.2} GB - {}", t(language, "vram_check"), vram_gb, msg),
+            format!("{} {:.2} MB - {}", t(language, "vram_check"), vram_gb, msg),
         );
     });
 

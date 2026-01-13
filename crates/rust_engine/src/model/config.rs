@@ -1,11 +1,11 @@
-//! BitLlamaConfig - Model configuration
+//! `BitLlamaConfig` - Model configuration
 
 use serde::Deserialize;
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-/// Model configuration for BitLlama
+/// Model configuration for `BitLlama`
 #[cfg(feature = "python")]
 #[pyclass]
 #[derive(Clone, Copy, Debug, Deserialize, serde::Serialize)]
@@ -28,13 +28,7 @@ pub struct BitLlamaConfig {
 impl BitLlamaConfig {
     #[new]
     pub fn new(vocab_size: usize, hidden_dim: usize, num_layers: usize, inner_lr: f64) -> Self {
-        Self {
-            vocab_size,
-            hidden_dim,
-            num_layers,
-            inner_lr,
-            n_gpu_layers: None,
-        }
+        Self { vocab_size, hidden_dim, num_layers, inner_lr, n_gpu_layers: None }
     }
 }
 
@@ -53,19 +47,13 @@ pub struct BitLlamaConfig {
 #[cfg(not(feature = "python"))]
 impl BitLlamaConfig {
     pub fn new(vocab_size: usize, hidden_dim: usize, num_layers: usize, inner_lr: f64) -> Self {
-        Self {
-            vocab_size,
-            hidden_dim,
-            num_layers,
-            inner_lr,
-            n_gpu_layers: None,
-        }
+        Self { vocab_size, hidden_dim, num_layers, inner_lr, n_gpu_layers: None }
     }
 }
 
 impl BitLlamaConfig {
     /// Calculate how many layers can fit in GPU VRAM
-    /// Formula: (FreeVRAM * 0.9 - 2GB) / (Weight + KV)
+    /// Formula: (`FreeVRAM` * 0.9 - 2GB) / (Weight + KV)
     pub fn calculate_auto_offload(&self, free_vram: usize) -> usize {
         let f_free = free_vram as f64 * 0.9;
         let safety = 2.0 * 1024.0 * 1024.0 * 1024.0; // 2GB Safety Margin

@@ -91,10 +91,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
         info!("✅ Tokenizer Loaded. Vocab Size: {}", v);
         v
     } else {
-        warn!(
-            "⚠️ Tokenizer not found! Specific path: {:?}",
-            tokenizer_path
-        );
+        warn!("⚠️ Tokenizer not found! Specific path: {:?}", tokenizer_path);
         warn!("⚠️ Defaulting VOCAB to 16384 (Risk of mismatch!)");
         16384
     };
@@ -138,7 +135,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
 
     let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
-    let model = BitLlama::load(config.clone(), vb)?;
+    let model = BitLlama::load(&config, vb)?;
 
     let base_dir = if Path::new("bit_llama_checkpoint.safetensors").exists() {
         "".to_string()
@@ -190,10 +187,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
     let save_interval = args.save_interval;
     let accumulation_steps = args.accum.max(1);
 
-    info!(
-        "Starting Training Loop (Target: {} steps, Accum: {})",
-        args.steps, accumulation_steps
-    );
+    info!("Starting Training Loop (Target: {} steps, Accum: {})", args.steps, accumulation_steps);
 
     // Gradient Accumulator Buffer (Matches optim_vars order)
     let mut grad_accumulator: Vec<Option<Tensor>> = vec![None; optim_vars.len()];
@@ -267,10 +261,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
         let tokenizer_dest = format!("{}tokenizer.json", effective_output_dir);
         if tokenizer_source.exists() {
             if let Err(e) = std::fs::copy(&tokenizer_source, &tokenizer_dest) {
-                warn!(
-                    "⚠️ Failed to copy tokenizer from {:?}: {}",
-                    tokenizer_source, e
-                );
+                warn!("⚠️ Failed to copy tokenizer from {:?}: {}", tokenizer_source, e);
             } else {
                 info!("✅ Tokenizer backed up to: {}", tokenizer_dest);
             }
@@ -278,16 +269,10 @@ pub fn run(args: TrainArgs) -> Result<()> {
             let default_tok = Path::new("data/TinyStories/tokenizer.json");
             if default_tok.exists() && default_tok != tokenizer_source {
                 if std::fs::copy(default_tok, &tokenizer_dest).is_ok() {
-                    info!(
-                        "✅ Tokenizer backed up to: {} (from default path)",
-                        tokenizer_dest
-                    );
+                    info!("✅ Tokenizer backed up to: {} (from default path)", tokenizer_dest);
                 }
             } else {
-                warn!(
-                    "⚠️ Warning: Source tokenizer not found at {:?}",
-                    tokenizer_source
-                );
+                warn!("⚠️ Warning: Source tokenizer not found at {:?}", tokenizer_source);
             }
         }
     }
@@ -299,10 +284,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
         if Path::new("stop_signal").exists() {
             info!("\n🛑 Stop signal detected (Start of Loop)! Saving and exiting...");
             let _ = std::fs::remove_file("stop_signal");
-            save_securely(
-                &varmap,
-                &format!("{}bit_llama_checkpoint.safetensors", base_dir),
-            )?;
+            save_securely(&varmap, &format!("{}bit_llama_checkpoint.safetensors", base_dir))?;
             let state = serde_json::json!({ "step": step });
             if let Ok(file) = File::create(&state_path) {
                 serde_json::to_writer(file, &state)?;
@@ -334,11 +316,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
         let d_small = args.dim / 4;
         let mut w_states = Vec::new();
         for _ in 0..args.layers {
-            w_states.push(Tensor::zeros(
-                (args.batch_size, d_small, d_small),
-                DType::F32,
-                &device,
-            )?);
+            w_states.push(Tensor::zeros((args.batch_size, d_small, d_small), DType::F32, &device)?);
         }
 
         let chunk_size = 32;
@@ -459,10 +437,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
                     "🏆 New best loss: {:.4} (Step {}) - Saving model_best.safetensors",
                     val, step
                 );
-                save_securely(
-                    &varmap,
-                    &format!("{}model_best.safetensors", effective_output_dir),
-                )?;
+                save_securely(&varmap, &format!("{}model_best.safetensors", effective_output_dir))?;
                 save_training_state(&effective_output_dir, "model_best", step, val)?;
             }
         }
@@ -513,10 +488,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
 
         if !running.load(Ordering::SeqCst) {
             info!("[Shutdown] Saving checkpoint at step {}...", step);
-            save_securely(
-                &varmap,
-                &format!("{}bit_llama_checkpoint.safetensors", base_dir),
-            )?;
+            save_securely(&varmap, &format!("{}bit_llama_checkpoint.safetensors", base_dir))?;
             let state = serde_json::json!({ "step": step });
             if let Ok(file) = File::create(&state_path) {
                 serde_json::to_writer(file, &state)?;

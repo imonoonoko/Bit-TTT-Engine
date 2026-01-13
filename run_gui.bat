@@ -1,0 +1,7 @@
+@echo off
+echo Initializing MSVC Environment...
+call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+
+echo Launching Bit-Llama GUI (High-Performance Mode)...
+cargo run --release --features cuda -p bit_llama -- gui
+pause

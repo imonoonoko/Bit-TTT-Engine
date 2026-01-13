@@ -1,4 +1,4 @@
-//! TTTLayer - Test-Time Training with Online Learning
+//! `TTTLayer` - Test-Time Training with Online Learning
 
 use candle_core::{Result, Tensor};
 use candle_nn::VarBuilder;
@@ -23,7 +23,7 @@ impl TTTLayer {
     pub fn load(
         hidden_dim: usize,
         inner_lr: f64,
-        vb: VarBuilder,
+        vb: VarBuilder<'_>,
         device: &candle_core::Device,
     ) -> Result<Self> {
         let d_small = hidden_dim / 4;
@@ -36,14 +36,14 @@ impl TTTLayer {
         })
     }
 
-    pub fn precompute_for_inference(&mut self) -> Result<()> {
-        self.proj_down.precompute_for_inference()?;
-        self.proj_up.precompute_for_inference()?;
+    pub fn precompute_packed(&mut self) -> Result<()> {
+        self.proj_down.precompute_packed()?;
+        self.proj_up.precompute_packed()?;
         Ok(())
     }
 
     /// Sequential forward with weight update
-    /// w_state: (B, D_small, D_small) or (D_small, D_small)
+    /// `w_state`: (B, `D_small`, `D_small`) or (`D_small`, `D_small`)
     /// x: (B, Hidden) or (Hidden)
     pub fn forward_update(&self, w_state: &Tensor, x_t: &Tensor) -> Result<(Tensor, Tensor)> {
         let feat = self.proj_down.forward(x_t)?;
@@ -75,8 +75,8 @@ impl TTTLayer {
 
     /// Parallel chunkwise implementation
     /// x: (B, T, Hidden)
-    /// w_state: (B, D_small, D_small)
-    /// Returns: (output: (B, T, Hidden), w_final: (B, D_small, D_small))
+    /// `w_state`: (B, `D_small`, `D_small`)
+    /// Returns: (output: (B, T, Hidden), `w_final`: (B, `D_small`, `D_small`))
     pub fn forward_chunkwise(
         &self,
         w_state: &Tensor,

@@ -37,12 +37,7 @@ impl ScheduleFreeOptimizer {
             z.push(var.as_tensor().copy()?);
         }
 
-        Ok(Self {
-            vars,
-            z,
-            step: 0,
-            params,
-        })
+        Ok(Self { vars, z, step: 0, params })
     }
 
     /// Prepare parameters for training (Forward Pass uses y)
@@ -67,9 +62,9 @@ impl ScheduleFreeOptimizer {
     /// Restore parameters to evaluation mode (Forward Pass uses c)
     /// This should be called before eval/save, or at end of training step if we want strictness.
     /// However, to save compute, we only call this when switching modes.
-    /// But wait, step() needs 'c' to update it.
-    /// Does step() assume vars hold 'y' or 'c'?
-    /// Usually step() is called after backward(). Params hold 'y'.
+    /// But wait, `step()` needs 'c' to update it.
+    /// Does `step()` assume vars hold 'y' or 'c'?
+    /// Usually `step()` is called after `backward()`. Params hold 'y'.
     /// We need to RECOVER 'c' from 'y' and 'z'?
     /// y = (1-b)z + bc  => c = (y - (1-b)z) / b
     /// This introduces numerical error.
@@ -87,8 +82,8 @@ impl ScheduleFreeOptimizer {
     /// This creates "swap overhead" but saves memory.
     ///
     /// Let's stick to the "Swap" approach.
-    /// train_pre_step(): vars = y.
-    /// train_post_step/step(): vars = c (restore), then update.
+    /// `train_pre_step()`: vars = y.
+    /// `train_post_step/step()`: vars = c (restore), then update.
     pub fn eval(&self) -> Result<()> {
         // If we are in 'y' state, we need to revert to 'c'.
         // But tracking state is hard.

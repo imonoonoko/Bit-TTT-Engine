@@ -1,10 +1,10 @@
 //! Layers Module - Core neural network layers
 //!
 //! This module contains the building blocks for the Bit-Llama architecture:
-//! - RMSNorm: Root Mean Square Layer Normalization
-//! - BitLinear: 1.58-bit quantized linear layer
-//! - SwiGLU: Gated MLP with SiLU activation
-//! - TTTLayer: Test-Time Training with online learning
+//! - `RMSNorm`: Root Mean Square Layer Normalization
+//! - `BitLinear`: 1.58-bit quantized linear layer
+//! - `SwiGLU`: Gated MLP with `SiLU` activation
+//! - `TTTLayer`: Test-Time Training with online learning
 
 use candle_core::{Result, Tensor};
 

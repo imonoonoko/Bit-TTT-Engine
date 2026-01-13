@@ -187,10 +187,9 @@ impl eframe::App for BitStudioApp {
         // So we can drain it in `tabs::inference::render`.
 
         // Left Panel (Project Management)
-        egui::SidePanel::left("project_panel")
-            .resizable(true)
-            .default_width(220.0)
-            .show(ctx, |ui| {
+        egui::SidePanel::left("project_panel").resizable(true).default_width(220.0).show(
+            ctx,
+            |ui| {
                 // Language Toggle at top
                 ui.horizontal(|ui| {
                     if ui.button(self.language.display_name()).clicked() {
@@ -217,14 +216,9 @@ impl eframe::App for BitStudioApp {
                 let projects = self.available_projects.clone();
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for proj in &projects {
-                        let is_selected = self
-                            .current_project
-                            .as_ref()
-                            .map_or(false, |p| p.config.name == *proj);
-                        if ui
-                            .selectable_label(is_selected, format!("📄 {}", proj))
-                            .clicked()
-                        {
+                        let is_selected =
+                            self.current_project.as_ref().is_some_and(|p| p.config.name == *proj);
+                        if ui.selectable_label(is_selected, format!("📄 {}", proj)).clicked() {
                             self.load_project(proj);
                         }
                     }
@@ -232,35 +226,33 @@ impl eframe::App for BitStudioApp {
 
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
                     ui.add_space(10.0);
-                    if self.current_project.is_some() {
-                        if ui.button("❌ Close Project").clicked() {
+                    if self.current_project.is_some()
+                        && ui.button("❌ Close Project").clicked() {
                             self.current_project = None;
                             self.tab = AppTab::Home;
                             self.available_projects = Self::scan_projects();
                         }
-                    }
                     ui.separator();
                 });
-            });
+            },
+        );
 
         // Main Content
         if let Some(project) = &mut self.current_project {
             // Log Panel
-            egui::TopBottomPanel::bottom("log_panel")
-                .resizable(true)
-                .default_height(150.0)
-                .show(ctx, |ui| {
+            egui::TopBottomPanel::bottom("log_panel").resizable(true).default_height(150.0).show(
+                ctx,
+                |ui| {
                     ui.heading("📟 Console Logs");
-                    egui::ScrollArea::vertical()
-                        .stick_to_bottom(true)
-                        .show(ui, |ui| {
-                            ui.add(
-                                egui::TextEdit::multiline(&mut project.get_logs())
-                                    .font(egui::TextStyle::Monospace)
-                                    .desired_width(f32::INFINITY),
-                            );
-                        });
-                });
+                    egui::ScrollArea::vertical().stick_to_bottom(true).show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut project.get_logs())
+                                .font(egui::TextStyle::Monospace)
+                                .desired_width(f32::INFINITY),
+                        );
+                    });
+                },
+            );
 
             // Nav Panel
             egui::TopBottomPanel::top("nav_panel").show(ctx, |ui| {
@@ -332,11 +324,7 @@ fn setup_custom_fonts(ctx: &egui::Context) {
         .or_default()
         .insert(0, "jp_font".to_owned());
 
-    fonts
-        .families
-        .entry(egui::FontFamily::Monospace)
-        .or_default()
-        .insert(0, "jp_font".to_owned());
+    fonts.families.entry(egui::FontFamily::Monospace).or_default().insert(0, "jp_font".to_owned());
 
     ctx.set_fonts(fonts);
     tracing::info!("[GUI] Fonts initialized.");

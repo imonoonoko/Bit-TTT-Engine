@@ -1,4 +1,4 @@
-//! SwiGLU - Gated MLP with SiLU activation
+//! `SwiGLU` - Gated MLP with `SiLU` activation
 
 use candle_core::Result;
 use candle_core::Tensor;
@@ -6,7 +6,7 @@ use candle_nn::VarBuilder;
 
 use super::BitLinear;
 
-/// SwiGLU MLP block (Gate, Down, Up projections)
+/// `SwiGLU` MLP block (Gate, Down, Up projections)
 pub struct SwiGLU {
     pub w1: BitLinear, // Gate
     pub w2: BitLinear, // Down
@@ -17,7 +17,7 @@ impl SwiGLU {
     pub fn load(
         hidden_dim: usize,
         intermediate_dim: usize,
-        vb: VarBuilder,
+        vb: VarBuilder<'_>,
         device: &candle_core::Device,
     ) -> Result<Self> {
         let w1 = BitLinear::load(hidden_dim, intermediate_dim, vb.pp("gate_proj"), device)?;
@@ -34,10 +34,10 @@ impl SwiGLU {
         self.w2.forward(&hidden)
     }
 
-    pub fn precompute_for_inference(&mut self) -> Result<()> {
-        self.w1.precompute_for_inference()?;
-        self.w2.precompute_for_inference()?;
-        self.w3.precompute_for_inference()?;
+    pub fn precompute_packed(&mut self) -> Result<()> {
+        self.w1.precompute_packed()?;
+        self.w2.precompute_packed()?;
+        self.w3.precompute_packed()?;
         Ok(())
     }
 }

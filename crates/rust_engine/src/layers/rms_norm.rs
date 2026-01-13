@@ -1,4 +1,4 @@
-//! RMSNorm - Root Mean Square Layer Normalization
+//! `RMSNorm` - Root Mean Square Layer Normalization
 
 use candle_core::{DType, Result, Tensor};
 use candle_nn::VarBuilder;
@@ -13,7 +13,7 @@ impl RMSNorm {
     pub fn load(
         dim: usize,
         eps: f64,
-        vb: VarBuilder,
+        vb: VarBuilder<'_>,
         device: &candle_core::Device,
     ) -> Result<Self> {
         let weight = vb
@@ -32,10 +32,7 @@ impl RMSNorm {
         let norm_x = (x_f32.sqr()?.sum_keepdim(dim)? / (hidden_size as f64))?;
         let x_normed = x_f32.broadcast_div(&(norm_x + self.eps)?.sqrt()?)?;
 
-        let weight = self
-            .weight
-            .to_dtype(internal_dtype)?
-            .broadcast_as(x_normed.shape())?;
+        let weight = self.weight.to_dtype(internal_dtype)?.broadcast_as(x_normed.shape())?;
         let result = (x_normed * weight)?;
 
         result.to_dtype(x_dtype)

@@ -13,7 +13,7 @@ jobs:
   build:
     name: Build & Test
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,7 +23,7 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      # ビルドキャッシュ（2回目以降爆速になります）
+      # ビルドキャッシュ
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
@@ -33,29 +33,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev libgtk-3-dev
 
-      # --- Rust Engine のチェック ---
-      - name: Build Engine
-        run: cargo build --verbose
-        working-directory: ./crates/rust_engine
-
-      - name: Run Tests (Engine)
-        run: cargo test --verbose
-        working-directory: ./crates/rust_engine
-
-      - name: Run Clippy (Lint)
-        # 警告をエラーとして扱う（品質担保）
-        run: cargo clippy -- -D warnings
-        working-directory: ./crates/rust_engine
-
-      - name: Check Formatting
-        run: cargo fmt --all -- --check
-        working-directory: ./crates/rust_engine
-
-      # --- Bit Llama のチェック ---
-      - name: Build Llama
-        run: cargo build --verbose
-        working-directory: ./crates/bit_llama
-
-      - name: Run Tests (Llama)
-        run: cargo test --verbose
-        working-directory: ./crates/bit_llama
+      # --- Death Confirmation (Workspace Level) ---
+      - name: Death Confirmation
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --all-targets --all-features -- -D warnings
+          cargo test --workspace --verbose

@@ -1,11 +1,11 @@
-//! BitLlamaBlock - Transformer block with TTT + MLP
+//! `BitLlamaBlock` - Transformer block with TTT + MLP
 
 use candle_core::{Result, Tensor};
 use candle_nn::VarBuilder;
 
 use crate::layers::{RMSNorm, SwiGLU, TTTLayer};
 
-/// Epsilon for RMSNorm
+/// Epsilon for `RMSNorm`
 const RMS_NORM_EPS: f64 = 1e-5;
 
 /// Single transformer block: TTT + MLP with residual connections
@@ -20,7 +20,7 @@ impl BitLlamaBlock {
     pub fn load(
         dim: usize,
         inner_lr: f64,
-        vb: VarBuilder,
+        vb: VarBuilder<'_>,
         device: &candle_core::Device,
     ) -> Result<Self> {
         let norm1 = RMSNorm::load(dim, RMS_NORM_EPS, vb.pp("norm1"), device)?;
@@ -29,17 +29,12 @@ impl BitLlamaBlock {
         let mlp_dim = dim * 4;
         let mlp = SwiGLU::load(dim, mlp_dim, vb.pp("mlp"), device)?;
 
-        Ok(Self {
-            norm1,
-            ttt,
-            norm2,
-            mlp,
-        })
+        Ok(Self { norm1, ttt, norm2, mlp })
     }
 
-    pub fn precompute_for_inference(&mut self) -> Result<()> {
-        self.ttt.precompute_for_inference()?;
-        self.mlp.precompute_for_inference()?;
+    pub fn precompute_packed(&mut self) -> Result<()> {
+        self.ttt.precompute_packed()?;
+        self.mlp.precompute_packed()?;
         Ok(())
     }
 

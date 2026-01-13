@@ -1,4 +1,4 @@
-//! Python Bindings for BitLlama (PyO3)
+//! Python Bindings for `BitLlama` (`PyO3`)
 
 #[cfg(feature = "python")]
 use candle_core::{DType, Tensor};
@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 #[cfg(feature = "python")]
 use crate::model::{BitLlama, BitLlamaConfig};
 
-/// Python wrapper for BitLlama model
+/// Python wrapper for `BitLlama` model
 #[cfg(feature = "python")]
 #[pyclass(name = "BitLlama")]
 pub struct PyBitLlama {
@@ -29,13 +29,12 @@ impl PyBitLlama {
     ) -> PyResult<Self> {
         let device = match device {
             Some("cuda") => candle_core::Device::new_cuda(0).map_err(|e| {
-                pyo3::exceptions::PyValueError::new_err(format!("CUDA error: {}", e))
+                pyo3::exceptions::PyValueError::new_err(format!("CUDA error: {e}"))
             })?,
             Some("cpu") | None => candle_core::Device::Cpu,
             Some(unknown) => {
                 return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "Unsupported device: {}. Use 'cpu' or 'cuda'",
-                    unknown
+                    "Unsupported device: {unknown}. Use 'cpu' or 'cuda'"
                 )))
             }
         };
@@ -45,11 +44,11 @@ impl PyBitLlama {
                 .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
         };
 
-        let mut model = BitLlama::load(config, vb)
+        let mut model = BitLlama::load(&config, vb)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         model
-            .precompute_for_inference()
+            .precompute_packed()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         let d_small = config.hidden_dim / 4;
@@ -60,10 +59,7 @@ impl PyBitLlama {
             w_states.push(w);
         }
 
-        Ok(Self {
-            inner: model,
-            w_states,
-        })
+        Ok(Self { inner: model, w_states })
     }
 
     pub fn forward(&mut self, token_id: u32) -> PyResult<Vec<f32>> {

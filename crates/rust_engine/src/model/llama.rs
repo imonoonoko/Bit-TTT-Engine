@@ -1,4 +1,4 @@
-//! BitLlama and Llama - Full model implementation
+//! `BitLlama` and Llama - Full model implementation
 
 use candle_core::{DType, Device, Module, Result, Tensor};
 use candle_nn::VarBuilder;
@@ -9,13 +9,13 @@ use tokenizers::Tokenizer;
 use crate::layers::{RMSNorm, TensorExt};
 use crate::model::{BitLlamaBlock, BitLlamaConfig};
 
-/// Epsilon for RMSNorm
+/// Epsilon for `RMSNorm`
 const RMS_NORM_EPS: f64 = 1e-5;
 
 /// Minimum temperature for sampling
 const TEMP_MIN: f64 = 1e-6;
 
-/// BitLlama model with embedding, layers, and LM head
+/// `BitLlama` model with embedding, layers, and LM head
 pub struct BitLlama {
     pub embedding: candle_nn::Embedding,
     pub layers: Vec<BitLlamaBlock>,
@@ -26,7 +26,7 @@ pub struct BitLlama {
 }
 
 impl BitLlama {
-    pub fn load(cfg: BitLlamaConfig, vb: VarBuilder) -> Result<Self> {
+    pub fn load(cfg: &BitLlamaConfig, vb: VarBuilder<'_>) -> Result<Self> {
         // Determine primary and secondary devices
         // Ideally, `vb.device()` is the main device (likely GPU if set up that way),
         // but for hybrid, we usually start with CPU vb and move to GPU.
@@ -53,8 +53,7 @@ impl BitLlama {
                         }
                         Err(e) => {
                             eprintln!(
-                                "[Auto-Config] Failed to detect VRAM: {}. Defaulting to CPU.",
-                                e
+                                "[Auto-Config] Failed to detect VRAM: {e}. Defaulting to CPU."
                             );
                             0
                         }
@@ -87,7 +86,7 @@ impl BitLlama {
             let layer = BitLlamaBlock::load(
                 cfg.hidden_dim,
                 cfg.inner_lr,
-                vb.pp(format!("layers.{}", i)),
+                vb.pp(format!("layers.{i}")),
                 target_device,
             )?;
             layers.push(layer);
@@ -104,18 +103,12 @@ impl BitLlama {
         // Let's just assume for now we keep it as returned by `linear_no_bias`.
         // Ideally, the final layer should be on GPU for fast logits.
 
-        Ok(Self {
-            embedding,
-            layers,
-            norm,
-            lm_head,
-            config: cfg,
-        })
+        Ok(Self { embedding, layers, norm, lm_head, config: cfg.clone() })
     }
 
-    pub fn precompute_for_inference(&mut self) -> Result<()> {
-        for layer in self.layers.iter_mut() {
-            layer.precompute_for_inference()?;
+    pub fn precompute_packed(&mut self) -> Result<()> {
+        for layer in &mut self.layers {
+            layer.precompute_packed()?;
         }
         Ok(())
     }
@@ -211,41 +204,18 @@ impl BitLlama {
 
     pub fn collect_tensors(&self) -> std::collections::HashMap<String, Tensor> {
         let mut tensors = std::collections::HashMap::new();
-        tensors.insert(
-            "embed.weight".to_string(),
-            self.embedding.embeddings().clone(),
-        );
+        tensors.insert("embed.weight".to_string(), self.embedding.embeddings().clone());
 
         for (i, layer) in self.layers.iter().enumerate() {
-            let prefix = format!("layers.{}", i);
-            tensors.insert(
-                format!("{}.norm1.weight", prefix),
-                layer.norm1.weight.clone(),
-            );
-            tensors.insert(
-                format!("{}.ttt.down.weight", prefix),
-                layer.ttt.proj_down.weight.clone(),
-            );
-            tensors.insert(
-                format!("{}.ttt.up.weight", prefix),
-                layer.ttt.proj_up.weight.clone(),
-            );
-            tensors.insert(
-                format!("{}.norm2.weight", prefix),
-                layer.norm2.weight.clone(),
-            );
-            tensors.insert(
-                format!("{}.mlp.gate_proj.weight", prefix),
-                layer.mlp.w1.weight.clone(),
-            );
-            tensors.insert(
-                format!("{}.mlp.down_proj.weight", prefix),
-                layer.mlp.w2.weight.clone(),
-            );
-            tensors.insert(
-                format!("{}.mlp.up_proj.weight", prefix),
-                layer.mlp.w3.weight.clone(),
-            );
+            let prefix = format!("layers.{i}");
+            tensors.insert(format!("{prefix}.norm1.weight"), layer.norm1.weight.clone());
+            tensors
+                .insert(format!("{prefix}.ttt.down.weight"), layer.ttt.proj_down.weight.clone());
+            tensors.insert(format!("{prefix}.ttt.up.weight"), layer.ttt.proj_up.weight.clone());
+            tensors.insert(format!("{prefix}.norm2.weight"), layer.norm2.weight.clone());
+            tensors.insert(format!("{prefix}.mlp.gate_proj.weight"), layer.mlp.w1.weight.clone());
+            tensors.insert(format!("{prefix}.mlp.down_proj.weight"), layer.mlp.w2.weight.clone());
+            tensors.insert(format!("{prefix}.mlp.up_proj.weight"), layer.mlp.w3.weight.clone());
         }
 
         tensors.insert("norm_f.weight".to_string(), self.norm.weight.clone());
@@ -295,8 +265,7 @@ impl Llama {
             .or_else(|_| Self::new_with_device(path, device))
             .map_err(|_| {
                 anyhow::anyhow!(
-                    "Failed to load model from {:?}. Not a valid .bitt file or legacy directory.",
-                    path
+                    "Failed to load model from {path:?}. Not a valid .bitt file or legacy directory."
                 )
             })
     }
@@ -315,9 +284,8 @@ impl Llama {
 
         // 🔒 Phase 2: Shared Lock
         let lock_path = format!("{}.lock", path.display());
-        let lock_file_handle = std::fs::File::open(&lock_path)
-            .or_else(|_| std::fs::File::create(&lock_path))
-            .ok();
+        let lock_file_handle =
+            std::fs::File::open(&lock_path).or_else(|_| std::fs::File::create(&lock_path)).ok();
 
         if let Some(ref f) = lock_file_handle {
             if let Err(e) = f.lock_shared() {
@@ -345,12 +313,12 @@ impl Llama {
         let header_json: serde_json::Value = serde_json::from_slice(header_slice)?;
 
         let config: BitLlamaConfig = serde_json::from_value(header_json["config"].clone())
-            .map_err(|e| anyhow::anyhow!("Failed to parse config from BITT header: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to parse config from BITT header: {e}"))?;
 
         use std::str::FromStr;
         let tokenizer_json_str = header_json["tokenizer"].to_string();
         let tokenizer = Tokenizer::from_str(&tokenizer_json_str)
-            .map_err(|e| anyhow::anyhow!("Failed to parse tokenizer from BITT header: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to parse tokenizer from BITT header: {e}"))?;
 
         let body_start = header_end;
         let body_slice = &mmap[body_start..];
@@ -361,8 +329,8 @@ impl Llama {
             device,
         )?;
 
-        let mut model = BitLlama::load(config, vb)?;
-        model.precompute_for_inference()?;
+        let mut model = BitLlama::load(&config, vb)?;
+        model.precompute_packed()?;
 
         let d_small = config.hidden_dim / 4;
         let mut w_states = Vec::new();
@@ -403,9 +371,8 @@ impl Llama {
 
         // 🔒 Phase 2: Shared Lock
         let lock_path = format!("{}.lock", weights.display());
-        let lock_file_handle = std::fs::File::open(&lock_path)
-            .or_else(|_| std::fs::File::create(&lock_path))
-            .ok();
+        let lock_file_handle =
+            std::fs::File::open(&lock_path).or_else(|_| std::fs::File::create(&lock_path)).ok();
 
         if let Some(ref f) = lock_file_handle {
             if let Err(e) = f.lock_shared() {
@@ -415,25 +382,21 @@ impl Llama {
 
         let config_path = dir.join("config.json");
         let config_str = std::fs::read_to_string(&config_path).map_err(|e| {
-            anyhow::anyhow!("Failed to read config.json from {:?}: {}", config_path, e)
+            anyhow::anyhow!("Failed to read config.json from {config_path:?}: {e}")
         })?;
         let config: BitLlamaConfig = serde_json::from_str(&config_str)?;
 
         let tokenizer_path = dir.join("tokenizer.json");
         let tokenizer = Tokenizer::from_file(&tokenizer_path).map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to load tokenizer.json from {:?}: {}",
-                tokenizer_path,
-                e
-            )
+            anyhow::anyhow!("Failed to load tokenizer.json from {tokenizer_path:?}: {e}")
         })?;
 
         let vb = unsafe {
             candle_nn::VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, device)?
         };
 
-        let mut model = BitLlama::load(config, vb)?;
-        model.precompute_for_inference()?;
+        let mut model = BitLlama::load(&config, vb)?;
+        model.precompute_packed()?;
 
         let d_small = config.hidden_dim / 4;
         let mut w_states = Vec::new();
@@ -464,10 +427,7 @@ impl Llama {
     {
         let temperature = if temp <= 0.0 { TEMP_MIN } else { temp };
 
-        let encoding = self
-            .tokenizer
-            .encode(prompt, true)
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let encoding = self.tokenizer.encode(prompt, true).map_err(|e| anyhow::anyhow!(e))?;
         let tokens = encoding.get_ids();
 
         if tokens.is_empty() {
@@ -492,16 +452,12 @@ impl Llama {
         all_tokens.push(next_token);
 
         let mut generated_tokens: Vec<u32> = vec![next_token];
-        let mut prev_decoded = self
-            .tokenizer
-            .decode(&generated_tokens, true)
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let mut prev_decoded =
+            self.tokenizer.decode(&generated_tokens, true).map_err(|e| anyhow::anyhow!(e))?;
 
         if !prev_decoded.is_empty() && !callback(&prev_decoded)? {
-            let full_text = self
-                .tokenizer
-                .decode(&all_tokens, true)
-                .map_err(|e| anyhow::anyhow!(e))?;
+            let full_text =
+                self.tokenizer.decode(&all_tokens, true).map_err(|e| anyhow::anyhow!(e))?;
             return Ok(full_text);
         }
 
@@ -517,10 +473,8 @@ impl Llama {
             all_tokens.push(next_token);
             generated_tokens.push(next_token);
 
-            let current_decoded = self
-                .tokenizer
-                .decode(&generated_tokens, true)
-                .map_err(|e| anyhow::anyhow!(e))?;
+            let current_decoded =
+                self.tokenizer.decode(&generated_tokens, true).map_err(|e| anyhow::anyhow!(e))?;
 
             let delta = if current_decoded.len() > prev_decoded.len() {
                 &current_decoded[prev_decoded.len()..]
@@ -536,10 +490,7 @@ impl Llama {
             prev_decoded = current_decoded;
         }
 
-        let full_text = self
-            .tokenizer
-            .decode(&all_tokens, true)
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let full_text = self.tokenizer.decode(&all_tokens, true).map_err(|e| anyhow::anyhow!(e))?;
         Ok(full_text)
     }
 
@@ -579,10 +530,7 @@ impl Llama {
         let _ = std::fs::remove_file(temp_path);
 
         let config_json = serde_json::to_value(self.model.config)?;
-        let tokenizer_json_str = self
-            .tokenizer
-            .to_string(false)
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let tokenizer_json_str = self.tokenizer.to_string(false).map_err(|e| anyhow::anyhow!(e))?;
 
         let header = serde_json::json!({
             "config": config_json,
@@ -602,7 +550,7 @@ impl Llama {
 
     pub fn reset_state(&mut self) -> anyhow::Result<()> {
         let d_small = self.model.config.hidden_dim / 4;
-        for w in self.w_states.iter_mut() {
+        for w in &mut self.w_states {
             *w = Tensor::zeros((d_small, d_small), DType::F32, &self.device)?;
         }
         Ok(())

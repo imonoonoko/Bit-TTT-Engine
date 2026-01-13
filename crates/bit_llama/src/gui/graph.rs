@@ -19,10 +19,7 @@ impl Default for TrainingGraph {
 
 impl TrainingGraph {
     pub fn new() -> Self {
-        Self {
-            data: Vec::new(),
-            current_step: 0,
-        }
+        Self { data: Vec::new(), current_step: 0 }
     }
 
     /// Add a new data point
@@ -40,9 +37,7 @@ impl TrainingGraph {
     /// Render the graph
     pub fn ui(&self, ui: &mut egui::Ui) {
         let points: PlotPoints = self.data.iter().copied().collect();
-        let line = Line::new(points)
-            .color(egui::Color32::from_rgb(100, 200, 100))
-            .name("Loss");
+        let line = Line::new(points).color(egui::Color32::from_rgb(100, 200, 100)).name("Loss");
 
         Plot::new("training_loss_plot")
             .view_aspect(2.0)

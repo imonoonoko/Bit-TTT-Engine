@@ -1,0 +1,84 @@
+**********************************************************************
+** Visual Studio 2022 Developer Command Prompt v17.14.23
+** Copyright (c) 2025 Microsoft Corporation
+**********************************************************************
+[vcvarsall.bat] Environment initialized for: 'x64'
+warning: cortex_rust@0.1.0: Successfully compiled CUDA kernel to "C:\\Users\\Humin\\.gemini\\antigravity\\scratch\\new-ai-project\\Bit-TTT\\target\\debug\\build\\cortex_rust-e7e45ff7e898356d\\out\\bit_op.ptx"
+   Compiling cortex_rust v0.1.0 (C:\Users\Humin\.gemini\antigravity\scratch\new-ai-project\Bit-TTT\crates\rust_engine)
+warning: unused import: `DType`
+ --> crates\rust_engine\tests\grad_test.rs:4:39
+  |
+4 |     use candle_core::{Device, Tensor, DType, Result};
+  |                                       ^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0599]: no method named `interpolate` found for struct `candle_core::Tensor` in the current scope
+    --> crates\rust_engine\tests\grad_test.rs:32:31
+     |
+  32 |         let x_var = x.clone().interpolate()?; // "interpolate" as shorthand for making var? No, var needs Var constructor?
+     |                               ^^^^^^^^^^^
+     |
+help: there is a method `interpolate1d` with a similar name, but with different arguments
+    --> C:\Users\Humin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\candle-core-0.8.4\src\tensor.rs:1116:5
+     |
+1116 |     pub fn interpolate1d(&self, target_size: usize) -> Result<Self> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0277]: the `?` operator can only be applied to values that implement `Try`
+  --> crates\rust_engine\tests\grad_test.rs:49:24
+   |
+49 |         let w_scaled = (w_t.broadcast_div(&scale)?)?;
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the `?` operator cannot be applied to type `candle_core::Tensor`
+   |
+   = help: the trait `Try` is not implemented for `candle_core::Tensor`
+
+error[E0282]: type annotations needed
+  --> crates\rust_engine\tests\grad_test.rs:49:13
+   |
+49 |         let w_scaled = (w_t.broadcast_div(&scale)?)?;
+   |             ^^^^^^^^
+50 |         let w_quant = w_scaled.round()?.clamp(-1.0, 1.0)?;
+   |                       -------- type must be known at this point
+   |
+help: consider giving `w_scaled` an explicit type
+   |
+49 |         let w_scaled: /* Type */ = (w_t.broadcast_div(&scale)?)?;
+   |                     ++++++++++++
+
+error[E0277]: the trait bound `Arc<BitLinearOp>: candle_core::CustomOp2` is not satisfied
+   --> crates\rust_engine\tests\grad_test.rs:80:43
+    |
+ 80 |         let y_custom = x_t.apply_op2(w_t, op)?;
+    |                            ---------      ^^ the trait `candle_core::CustomOp2` is not implemented for `Arc<BitLinearOp>`
+    |                            |
+    |                            required by a bound introduced by this call
+    |
+    = help: the trait `candle_core::CustomOp2` is implemented for `BitLinearOp`
+note: required by a bound in `candle_core::custom_op::<impl candle_core::Tensor>::apply_op2`
+   --> C:\Users\Humin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\candle-core-0.8.4\src\custom_op.rs:211:35
+    |
+211 |     pub fn apply_op2<C: 'static + CustomOp2 + Send + Sync>(&self, r: &Self, c: C) -> Result<Self> {
+    |                                   ^^^^^^^^^ required by this bound in `candle_core::custom_op::<impl Tensor>::apply_op2`
+
+error[E0277]: the trait bound `Arc<BitLinearOp>: candle_core::CustomOp2` is not satisfied
+   --> crates\rust_engine\tests\grad_test.rs:129:64
+    |
+129 |         let y_custom_unscaled = x_t.apply_op2(&w_scaled_input, op_real)?;
+    |                                     ---------                  ^^^^^^^ the trait `candle_core::CustomOp2` is not implemented for `Arc<BitLinearOp>`
+    |                                     |
+    |                                     required by a bound introduced by this call
+    |
+    = help: the trait `candle_core::CustomOp2` is implemented for `BitLinearOp`
+note: required by a bound in `candle_core::custom_op::<impl candle_core::Tensor>::apply_op2`
+   --> C:\Users\Humin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\candle-core-0.8.4\src\custom_op.rs:211:35
+    |
+211 |     pub fn apply_op2<C: 'static + CustomOp2 + Send + Sync>(&self, r: &Self, c: C) -> Result<Self> {
+    |                                   ^^^^^^^^^ required by this bound in `candle_core::custom_op::<impl Tensor>::apply_op2`
+
+Some errors have detailed explanations: E0277, E0282, E0599.
+For more information about an error, try `rustc --explain E0277`.
+warning: `cortex_rust` (test "grad_test") generated 1 warning
+warning: cortex_rust@0.1.0: Successfully compiled CUDA kernel to "C:\\Users\\Humin\\.gemini\\antigravity\\scratch\\new-ai-project\\Bit-TTT\\target\\debug\\build\\cortex_rust-e7e45ff7e898356d\\out\\bit_op.ptx"
+error: could not compile `cortex_rust` (test "grad_test") due to 5 previous errors; 1 warning emitted
+warning: build failed, waiting for other jobs to finish...

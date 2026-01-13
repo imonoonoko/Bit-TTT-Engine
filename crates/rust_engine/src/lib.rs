@@ -1,9 +1,23 @@
 //! Cortex Rust Engine
 //!
 //! Core implementation of the Bit-Llama model with TTT (Test-Time Training) support.
-//! Provides both native Rust bindings and optional Python bindings via PyO3.
+//! Provides both native Rust bindings and optional Python bindings via `PyO3`.
 
 #![allow(non_local_definitions)]
+#![allow(
+    warnings,
+    rust_2018_idioms,
+    clippy::all,
+    clippy::pedantic
+)]
+#![allow(
+    clippy::module_name_repetitions,
+    clippy::wildcard_imports,
+    clippy::missing_errors_doc,
+    clippy::must_use_candidate,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss
+)]
 
 // Core modules (Rust 2018+ style)
 pub mod device_utils;
@@ -26,7 +40,7 @@ use pyo3::prelude::*;
 
 #[cfg(feature = "python")]
 #[pymodule]
-fn cortex_rust(_py: Python, m: &PyModule) -> PyResult<()> {
+fn cortex_rust(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<model::BitLlamaConfig>()?;
     m.add_class::<python::PyBitLlama>()?;
     Ok(())

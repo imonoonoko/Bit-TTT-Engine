@@ -23,12 +23,7 @@ impl Concatenator {
         cancel_flag: Arc<AtomicBool>,
         log_tx: Sender<String>,
     ) -> Self {
-        Self {
-            input_pattern,
-            output_path,
-            cancel_flag,
-            log_tx,
-        }
+        Self { input_pattern, output_path, cancel_flag, log_tx }
     }
 
     pub fn run(self) {

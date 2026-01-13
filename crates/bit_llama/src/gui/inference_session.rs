@@ -16,14 +16,16 @@ pub struct InferenceSession {
     pub event_rx: Receiver<InferenceEvent>,
 }
 
+impl Default for InferenceSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InferenceSession {
     pub fn new() -> Self {
         let (_, rx) = channel();
-        Self {
-            active_process: None,
-            input_tx: None,
-            event_rx: rx,
-        }
+        Self { active_process: None, input_tx: None, event_rx: rx }
     }
 
     pub fn is_active(&self) -> bool {
@@ -63,7 +65,7 @@ impl InferenceSession {
         let mut stdin = child.stdin.take().unwrap();
         thread::spawn(move || {
             while let Ok(msg) = in_rx.recv() {
-                if let Err(_) = writeln!(stdin, "{}", msg) {
+                if writeln!(stdin, "{}", msg).is_err() {
                     break;
                 }
             }

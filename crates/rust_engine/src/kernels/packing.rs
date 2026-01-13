@@ -21,7 +21,7 @@ pub struct PackedTensor {
 }
 
 impl PackedTensor {
-    /// Create new PackedTensor from raw bytes
+    /// Create new `PackedTensor` from raw bytes
     pub fn new(
         data: Vec<u8>,
         shape: candle_core::Shape,
@@ -37,16 +37,10 @@ impl PackedTensor {
 
         let tensor = Tensor::from_vec(data, (capacity,), device)?;
 
-        Ok(Self {
-            data: tensor,
-            scale,
-            shape: shape.clone(),
-            num_elem,
-            device: device.clone(),
-        })
+        Ok(Self { data: tensor, scale, shape, num_elem, device: device.clone() })
     }
 
-    /// Pack a float tensor (containing -1.0, 0.0, 1.0 or raw weights) into PackedTensor
+    /// Pack a float tensor (containing -1.0, 0.0, 1.0 or raw weights) into `PackedTensor`
     pub fn pack(tensor: &Tensor) -> Result<Self> {
         let device = tensor.device();
         let shape = tensor.shape().clone();
@@ -58,11 +52,8 @@ impl PackedTensor {
 
         // 2. Quantize: W_scaled = round(clamp(W / Scale, -1, 1))
         // This maps values to {-1, 0, 1}
-        let w_scaled = (tensor / scale as f64)?;
-        let w_quant = w_scaled
-            .round()?
-            .clamp(-1.0, 1.0)?
-            .to_dtype(candle_core::DType::F32)?;
+        let w_scaled = (tensor / f64::from(scale))?;
+        let w_quant = w_scaled.round()?.clamp(-1.0, 1.0)?.to_dtype(candle_core::DType::F32)?;
 
         // 3. Flatten and Pack
         let flat = w_quant.flatten_all()?;
@@ -95,13 +86,7 @@ impl PackedTensor {
         let data_tensor =
             Tensor::from_vec(packed_data, (capacity,), &Device::Cpu)?.to_device(device)?;
 
-        Ok(Self {
-            data: data_tensor,
-            scale,
-            shape,
-            num_elem,
-            device: device.clone(),
-        })
+        Ok(Self { data: data_tensor, scale, shape, num_elem, device: device.clone() })
     }
 
     /// Unpack back to f32 tensor (for verification/fallback)
@@ -129,7 +114,7 @@ impl PackedTensor {
         // Restore scale
         // Restore scale
         let t = Tensor::from_vec(floats, self.shape.clone(), device)?;
-        (t * self.scale as f64)?.to_dtype(candle_core::DType::F32)
+        (t * f64::from(self.scale))?.to_dtype(candle_core::DType::F32)
     }
 }
 

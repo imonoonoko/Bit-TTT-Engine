@@ -1,0 +1,9 @@
+**********************************************************************
+** Visual Studio 2022 Developer Command Prompt v17.14.23
+** Copyright (c) 2025 Microsoft Corporation
+**********************************************************************
+[vcvarsall.bat] Environment initialized for: 'x64'
+warning: cortex_rust@0.1.0: Successfully compiled CUDA kernel to "C:\\Users\\Humin\\.gemini\\antigravity\\scratch\\new-ai-project\\Bit-TTT\\target\\debug\\build\\cortex_rust-d22298e08db23377\\out\\bit_op.ptx"
+    Checking cortex_rust v0.1.0 (C:\Users\Humin\.gemini\antigravity\scratch\new-ai-project\Bit-TTT\crates\rust_engine)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.60s
+Check Successful

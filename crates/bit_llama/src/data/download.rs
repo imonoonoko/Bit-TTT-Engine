@@ -9,10 +9,8 @@ pub fn download_file(url: &str, output_path: &Path) -> Result<()> {
 
     let resp = ureq::get(url).call().context("Failed to send request")?;
 
-    let total_size: u64 = resp
-        .header("Content-Length")
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(0u64);
+    let total_size: u64 =
+        resp.header("Content-Length").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0u64);
 
     let pb = ProgressBar::new(total_size);
     pb.set_style(ProgressStyle::default_bar()

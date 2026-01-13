@@ -1,0 +1,65 @@
+**********************************************************************
+** Visual Studio 2022 Developer Command Prompt v17.14.23
+** Copyright (c) 2025 Microsoft Corporation
+**********************************************************************
+[vcvarsall.bat] Environment initialized for: 'x64'
+   Compiling cortex_rust v0.1.0 (C:\Users\Humin\.gemini\antigravity\scratch\new-ai-project\Bit-TTT\crates\rust_engine)
+warning: cortex_rust@0.1.0: Successfully compiled CUDA kernel to "C:\\Users\\Humin\\.gemini\\antigravity\\scratch\\new-ai-project\\Bit-TTT\\target\\debug\\build\\cortex_rust-4c069deec5c479f9\\out\\bit_op.ptx"
+error[E0599]: no method named `precompute_for_inference` found for struct `layers::bit_linear::BitLinear` in the current scope
+  --> crates\rust_engine\src\layers\swiglu.rs:38:17
+   |
+38 |         self.w1.precompute_for_inference()?;
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^ method not found in `layers::bit_linear::BitLinear`
+   |
+  ::: crates\rust_engine\src\layers\bit_linear.rs:12:1
+   |
+12 | pub struct BitLinear {
+   | -------------------- method `precompute_for_inference` not found for this struct
+
+error[E0599]: no method named `precompute_for_inference` found for struct `layers::bit_linear::BitLinear` in the current scope
+  --> crates\rust_engine\src\layers\swiglu.rs:39:17
+   |
+39 |         self.w2.precompute_for_inference()?;
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^ method not found in `layers::bit_linear::BitLinear`
+   |
+  ::: crates\rust_engine\src\layers\bit_linear.rs:12:1
+   |
+12 | pub struct BitLinear {
+   | -------------------- method `precompute_for_inference` not found for this struct
+
+error[E0599]: no method named `precompute_for_inference` found for struct `layers::bit_linear::BitLinear` in the current scope
+  --> crates\rust_engine\src\layers\swiglu.rs:40:17
+   |
+40 |         self.w3.precompute_for_inference()?;
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^ method not found in `layers::bit_linear::BitLinear`
+   |
+  ::: crates\rust_engine\src\layers\bit_linear.rs:12:1
+   |
+12 | pub struct BitLinear {
+   | -------------------- method `precompute_for_inference` not found for this struct
+
+error[E0599]: no method named `precompute_for_inference` found for struct `layers::bit_linear::BitLinear` in the current scope
+  --> crates\rust_engine\src\layers\ttt.rs:40:24
+   |
+40 |         self.proj_down.precompute_for_inference()?;
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^ method not found in `layers::bit_linear::BitLinear`
+   |
+  ::: crates\rust_engine\src\layers\bit_linear.rs:12:1
+   |
+12 | pub struct BitLinear {
+   | -------------------- method `precompute_for_inference` not found for this struct
+
+error[E0599]: no method named `precompute_for_inference` found for struct `layers::bit_linear::BitLinear` in the current scope
+  --> crates\rust_engine\src\layers\ttt.rs:41:22
+   |
+41 |         self.proj_up.precompute_for_inference()?;
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^ method not found in `layers::bit_linear::BitLinear`
+   |
+  ::: crates\rust_engine\src\layers\bit_linear.rs:12:1
+   |
+12 | pub struct BitLinear {
+   | -------------------- method `precompute_for_inference` not found for this struct
+
+For more information about this error, try `rustc --explain E0599`.
+warning: cortex_rust@0.1.0: Successfully compiled CUDA kernel to "C:\\Users\\Humin\\.gemini\\antigravity\\scratch\\new-ai-project\\Bit-TTT\\target\\debug\\build\\cortex_rust-4c069deec5c479f9\\out\\bit_op.ptx"
+error: could not compile `cortex_rust` (lib) due to 5 previous errors

@@ -18,9 +18,7 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
         ui.heading(t(language, "collect_raw"));
         ui.horizontal(|ui| {
             if ui.button(t(language, "open_raw_folder")).clicked() {
-                let _ = Command::new("explorer")
-                    .arg(project.path.join("raw"))
-                    .spawn();
+                let _ = Command::new("explorer").arg(project.path.join("raw")).spawn();
             }
             ui.label(t(language, "place_txt_here"));
         });
@@ -45,10 +43,7 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
         } else {
             // Disable if other process is running
             if ui
-                .add_enabled(
-                    !project.is_running,
-                    egui::Button::new(t(language, "concat_btn")),
-                )
+                .add_enabled(!project.is_running, egui::Button::new(t(language, "concat_btn")))
                 .clicked()
             {
                 project.concat_txt_files();
@@ -68,8 +63,7 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
         ui.heading(t(language, "train_tokenizer"));
 
         ui.horizontal(|ui| {
-            ui.label(t(language, "model_type"))
-                .on_hover_text(t_tooltip(language, "model_type"));
+            ui.label(t(language, "model_type")).on_hover_text(t_tooltip(language, "model_type"));
             ui.radio_value(
                 &mut project.config.model_type,
                 ModelType::Unigram,
@@ -92,17 +86,10 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
         ui.add_space(5.0);
 
         if ui.button(t(language, "start_tokenizer")).clicked() {
-            let corpus_path = project
-                .path
-                .join("data/corpus.txt")
-                .to_string_lossy()
-                .into_owned();
+            let corpus_path = project.path.join("data/corpus.txt").to_string_lossy().into_owned();
             let vocab_str = project.config.vocab_size.to_string();
-            let output_path = project
-                .path
-                .join("data/tokenizer.json")
-                .to_string_lossy()
-                .into_owned();
+            let output_path =
+                project.path.join("data/tokenizer.json").to_string_lossy().into_owned();
 
             let model_type_str = match project.config.model_type {
                 ModelType::Bpe => "bpe",

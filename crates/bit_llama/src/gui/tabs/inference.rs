@@ -14,16 +14,12 @@ pub fn render(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                     if last.role == "Assistant" {
                         last.content.push_str(&text);
                     } else {
-                        app.chat_history.push(ChatMessage {
-                            role: "Assistant".to_string(),
-                            content: text,
-                        });
+                        app.chat_history
+                            .push(ChatMessage { role: "Assistant".to_string(), content: text });
                     }
                 } else {
-                    app.chat_history.push(ChatMessage {
-                        role: "Assistant".to_string(),
-                        content: text,
-                    });
+                    app.chat_history
+                        .push(ChatMessage { role: "Assistant".to_string(), content: text });
                 }
             }
             InferenceEvent::Ready => {
@@ -84,7 +80,7 @@ pub fn render(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                 }
                 ui.label(egui::RichText::new("🟢 Active").color(egui::Color32::GREEN));
             } else {
-                let is_training = app.current_project.as_ref().map_or(false, |p| p.is_running);
+                let is_training = app.current_project.as_ref().is_some_and(|p| p.is_running);
                 ui.add_enabled_ui(!is_training, |ui| {
                     if ui.button("▶ Load Model").clicked() {
                         if let Some(proj) = &app.current_project {
@@ -165,10 +161,9 @@ pub fn render(app: &mut BitStudioApp, ui: &mut egui::Ui) {
 
     // 3. Chat History Area
     // 3. Chat History Area
-    egui::TopBottomPanel::bottom("input_area")
-        .resizable(false)
-        .min_height(60.0)
-        .show_inside(ui, |ui| {
+    egui::TopBottomPanel::bottom("input_area").resizable(false).min_height(60.0).show_inside(
+        ui,
+        |ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                 if ui.button("Send").clicked() {
                     send_message(app);
@@ -202,20 +197,18 @@ pub fn render(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                         .hint_text("Type a message... (Ctrl+Enter to send)"),
                 );
             });
-        });
+        },
+    );
 
-    egui::ScrollArea::vertical()
-        .stick_to_bottom(true)
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            for msg in &app.chat_history {
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(format!("{}: ", msg.role)).strong());
-                    ui.label(&msg.content);
-                });
-                ui.add_space(5.0);
-            }
-        });
+    egui::ScrollArea::vertical().stick_to_bottom(true).auto_shrink([false, false]).show(ui, |ui| {
+        for msg in &app.chat_history {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(format!("{}: ", msg.role)).strong());
+                ui.label(&msg.content);
+            });
+            ui.add_space(5.0);
+        }
+    });
 }
 
 fn send_message(app: &mut BitStudioApp) {
@@ -225,10 +218,7 @@ fn send_message(app: &mut BitStudioApp) {
     }
 
     // Add User Message
-    app.chat_history.push(ChatMessage {
-        role: "User".to_string(),
-        content: text.clone(),
-    });
+    app.chat_history.push(ChatMessage { role: "User".to_string(), content: text.clone() });
 
     // Send to process
     if app.inference_session.is_active() {

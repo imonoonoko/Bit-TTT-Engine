@@ -5,7 +5,7 @@ use rayon::prelude::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
-/// CPU Optimized Kernel for BitNet MatMul
+/// CPU Optimized Kernel for `BitNet` `MatMul`
 /// Uses explicit SIMD (AVX2/AVX-512) if available, or auto-vectorized loop.
 #[derive(Debug, Clone)]
 pub struct BitLinearCpu;
@@ -20,13 +20,7 @@ impl BitLinearCpu {
         let (n, k_w) = weights.shape.dims2()?;
 
         if k != k_w {
-            candle_core::bail!(
-                "Shape mismatch: Input [{}, {}] vs Weight [{}, {}]",
-                m,
-                k,
-                n,
-                k_w
-            );
+            candle_core::bail!("Shape mismatch: Input [{}, {}] vs Weight [{}, {}]", m, k, n, k_w);
         }
 
         // Ideally we do this without allocating a huge full-float weight matrix.
@@ -70,58 +64,55 @@ impl BitLinearCpu {
         // Note: x_vec and w_vec are read-only and shared across threads.
         // Rust's borrow checker allows this with Rayon.
 
-        output
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(global_idx, out_val)| {
-                let i = global_idx / n; // Row Index (Batch)
-                let j = global_idx % n; // Col Index (Output Feature)
+        output.par_iter_mut().enumerate().for_each(|(global_idx, out_val)| {
+            let i = global_idx / n; // Row Index (Batch)
+            let j = global_idx % n; // Col Index (Output Feature)
 
-                let mut sum = 0.0f32;
-                let w_row_start = j * k.div_ceil(4);
-                let x_row_start = i * k;
+            let mut sum = 0.0f32;
+            let w_row_start = j * k.div_ceil(4);
+            let x_row_start = i * k;
 
-                // AVX2 Path
-                let mut processed = 0;
-                if has_avx2 {
-                    // Process in chunks of 32 (128 bytes of X, 8 bytes of W)
-                    // 32 weights = 64 bits = 8 bytes.
-                    let chunk_size = 32;
-                    let num_chunks = k / chunk_size;
+            // AVX2 Path
+            let mut processed = 0;
+            if has_avx2 {
+                // Process in chunks of 32 (128 bytes of X, 8 bytes of W)
+                // 32 weights = 64 bits = 8 bytes.
+                let chunk_size = 32;
+                let num_chunks = k / chunk_size;
 
-                    // Unsafe block for AVX intrinsics
-                    #[cfg(target_arch = "x86_64")]
-                    unsafe {
-                        sum += compute_row_avx2(
-                            &x_vec[x_row_start..],
-                            &w_slice[w_row_start..],
-                            num_chunks,
-                        );
-                    }
-                    processed = num_chunks * chunk_size;
+                // Unsafe block for AVX intrinsics
+                #[cfg(target_arch = "x86_64")]
+                unsafe {
+                    sum += compute_row_avx2(
+                        &x_vec[x_row_start..],
+                        &w_slice[w_row_start..],
+                        num_chunks,
+                    );
                 }
+                processed = num_chunks * chunk_size;
+            }
 
-                // Remainder (Scalar Loop)
-                for l in processed..k {
-                    // Safety: We assume valid shapes from validation check.
-                    // Using get_unchecked for max speed in inner loop.
-                    let x_val = unsafe { *x_vec.get_unchecked(x_row_start + l) };
+            // Remainder (Scalar Loop)
+            for l in processed..k {
+                // Safety: We assume valid shapes from validation check.
+                // Using get_unchecked for max speed in inner loop.
+                let x_val = unsafe { *x_vec.get_unchecked(x_row_start + l) };
 
-                    let byte_idx = l / 4;
-                    let bit_idx = l % 4;
+                let byte_idx = l / 4;
+                let bit_idx = l % 4;
 
-                    if w_row_start + byte_idx >= w_slice.len() {
-                        break;
-                    }
-                    let byte = unsafe { *w_slice.get_unchecked(w_row_start + byte_idx) };
-
-                    let code = (byte >> (bit_idx * 2)) & 0b11;
-
-                    let coeff = unsafe { *LUT.get_unchecked(code as usize) };
-                    sum += x_val * coeff;
+                if w_row_start + byte_idx >= w_slice.len() {
+                    break;
                 }
-                *out_val = sum * weights.scale;
-            });
+                let byte = unsafe { *w_slice.get_unchecked(w_row_start + byte_idx) };
+
+                let code = (byte >> (bit_idx * 2)) & 0b11;
+
+                let coeff = unsafe { *LUT.get_unchecked(code as usize) };
+                sum += x_val * coeff;
+            }
+            *out_val = sum * weights.scale;
+        });
 
         Tensor::from_vec(output, (m, n), &candle_core::Device::Cpu)
     }
@@ -192,7 +183,7 @@ unsafe fn compute_row_avx2(x_ptr: &[f32], w_ptr: &[u8], num_chunks: usize) -> f3
         for _ in 0..4 {
             // 1. Load 2 bytes (8 weights)
             // Need to read u16.
-            let w_val = *(w_curr as *const u16);
+            let w_val = unsafe { w_curr.cast::<u16>().read_unaligned() };
             w_curr = w_curr.add(2);
 
             // Expand 2 bytes to 8 integers?
@@ -207,7 +198,7 @@ unsafe fn compute_row_avx2(x_ptr: &[f32], w_ptr: &[u8], num_chunks: usize) -> f3
                 let shift = b * 2;
                 let code = (w_val >> shift) & 0x03;
                 // (code & 1) - (code >> 1)
-                let val = ((code & 1) as i32) - ((code >> 1) as i32);
+                let val = i32::from(code & 1) - i32::from(code >> 1);
                 *coeff = val as f32;
             }
             let w_vec = _mm256_loadu_ps(coeffs.as_ptr());
@@ -230,7 +221,7 @@ unsafe fn compute_row_avx2(x_ptr: &[f32], w_ptr: &[u8], num_chunks: usize) -> f3
 
     // Extract lower float
     let mut result = 0.0;
-    _mm_store_ss(&mut result, _mm256_castps256_ps128(m3)); // Only accurate for first element?
+    _mm_store_ss(&raw mut result, _mm256_castps256_ps128(m3)); // Only accurate for first element?
                                                            // mm256_hadd is tricky.
                                                            // Easier: Extract to array and sum scalar.
     let mut temp = [0.0f32; 8];
