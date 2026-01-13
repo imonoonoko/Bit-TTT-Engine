@@ -23,7 +23,7 @@ def create_dummy_data(data_dir):
 
 def run_smoke_test():
     log("Starting Smoke Test...")
-    
+
     # Paths
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     target_dir = os.path.join(root_dir, "target", "release")
@@ -37,7 +37,7 @@ def run_smoke_test():
         except Exception as e:
              print(f"[PRE-DEMON] Warning: Cleanup failed: {e}")
     os.makedirs(model_dir, exist_ok=True)
-    
+
     ensure_dir(data_dir)
     ensure_dir(model_dir)
 
@@ -82,18 +82,19 @@ def run_smoke_test():
         "--batch-size", "2",
         "--steps", "10",
         "--data", data_file,
-        "--output-dir", model_dir
+        "--output-dir", os.path.abspath(model_dir),
+        "--save-interval", "5"
     ]
-    
+
     start_time = time.time()
     try:
         # Set environment to force CPU if needed, though arguments usually control it.
         # But here we don't pass --features cuda to cargo build, so it should be CPU default depending on Cargo.toml
         # Actually Cargo.toml has default = ["python"], cuda is optional.
         # Verification: we are running the binary directly.
-        
-        proc = subprocess.run(cmd, cwd=root_dir, check=False)
-        
+
+        proc = subprocess.run(cmd, cwd=root_dir, check=False, capture_output=True, text=True)
+
         if proc.returncode != 0:
             log("❌ Training FAILED")
             print(proc.stderr)

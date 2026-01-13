@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.1.0] - 2026-01-13
+**Optimized Tokenizer & Refactoring Release**
+
+### Phase D: High-Performance IO & Refactoring
+
+#### ⚡ Optimization (Tokenizer)
+-   **Streaming IO (OOM Fix)**: switched from `fs::read` (loading potentially huge files into RAM) to `io::copy` and `BufReader` with fixed-size chunks (1MB/4MB). This strictly bounds memory usage, preventing OOM crashes on large datasets.
+-   **Async Concatenation**: Moved corpus concatenation to a background thread with generic cancellation support, eliminating GUI freezes.
+-   **Parallel Sampling**: Implemented `ParallelSampler` using `rayon` and a "Writer Thread" pattern to maximize NVMe throughput during tokenizer training.
+
+#### 🛠 Refactoring
+-   **Decoupling**: Extracted data processing logic from `state.rs` and `vocab.rs` into dedicated modules:
+    -   `crates/bit_llama/src/data/concat.rs`: Handles file concatenation.
+    -   `crates/bit_llama/src/data/sampler.rs`: Handles parallel sampling.
+-   **Code Quality**: Added `cargo fmt --all` to the `/commit-push` workflow to enforce formatting consistency.
+-   **Fix**: Resolved a `clippy::ptr_arg` warning in `schedule_free.rs`.
+
 ## [v0.1.0] - 2026-01-12
 **First Public Prototype Release**
 

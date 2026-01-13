@@ -55,11 +55,50 @@ pub fn show(
             project.config.batch_size * project.config.accum_steps
         ));
 
-        // VRAM Estimation Display
-        let (vram_mb, status, color) = project.config.estimate_vram_usage();
+        // VRAM Efficiency Metrics
+        let eff = project.config.estimate_efficiency();
+
+        ui.add_space(5.0);
+        ui.heading(t(language, "vram_efficiency"));
+
+        egui::Grid::new("vram_metrics").num_columns(2).show(ui, |ui| {
+            ui.label("FP16 (Inference):");
+            ui.label(format!("{:.0} MB", eff.fp16_mb));
+            ui.end_row();
+
+            ui.label("Bit-TTT (Yours):");
+            ui.colored_label(eff.color, format!("{:.0} MB", eff.bit_ttt_mb));
+            ui.end_row();
+        });
+
+        // Visual Comparison Bar
+        let max_width = ui.available_width();
+        let scale = if eff.fp16_mb > 0.0 { max_width / eff.fp16_mb as f32 } else { 0.0 };
+
+        let fp16_width = (eff.fp16_mb as f32 * scale).max(1.0);
+        let bit_width = (eff.bit_ttt_mb as f32 * scale).max(1.0);
+
+        ui.add_space(2.0);
+        let (rect, _resp) = ui.allocate_at_least(egui::vec2(max_width, 20.0), egui::Sense::hover());
+
+        // Draw FP16 (Background/Gray)
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(rect.min, egui::vec2(fp16_width, 20.0)),
+            2.0,
+            egui::Color32::from_gray(60),
+        );
+        // Draw Bit-TTT (Foreground/Colored)
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(rect.min, egui::vec2(bit_width, 20.0)),
+            2.0,
+            eff.color,
+        );
+
+        // Savings Badge
         ui.horizontal(|ui| {
-            ui.label("Est. VRAM:");
-            ui.colored_label(color, format!("{:.0} MB ({})", vram_mb, status));
+            ui.label(egui::RichText::new("⚡ SAVED:").strong().color(egui::Color32::YELLOW));
+            ui.label(egui::RichText::new(format!("{:.1} GB", eff.saved_mb / 1024.0)).strong().heading());
+            ui.small(format!("({:.1}x Efficiency)", eff.saved_ratio));
         });
 
         ui.add_space(5.0);

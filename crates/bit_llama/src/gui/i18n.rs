@@ -200,6 +200,8 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         // === VRAM ===
         (Language::Japanese, "vram_check") => "VRAM 確認:",
         (Language::English, "vram_check") => "VRAM Check:",
+        (Language::Japanese, "vram_efficiency") => "VRAM効率 (推論時 / Inference)",
+        (Language::English, "vram_efficiency") => "VRAM Efficiency (Inference)",
 
         // === Fallback ===
         // Return empty string for unknown keys (safe fallback)

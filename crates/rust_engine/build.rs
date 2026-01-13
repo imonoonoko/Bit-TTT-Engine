@@ -29,17 +29,22 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let status = Command::new(&nvcc)
+    let output = Command::new(&nvcc)
         .arg("-ptx")
         .arg("-arch=compute_80") // Target Ampere (RTX 30 series+) or adjust
         .arg("-code=sm_80")
         .arg(cuda_file)
         .arg("-o")
         .arg(&output_ptx)
-        .status()?;
+        .output()?;
 
-    if !status.success() {
-        println!("cargo:warning=Failed to compile CUDA kernel. Check nvcc setup. Using dummy PTX.");
+    if !output.status.success() {
+        let err_str = String::from_utf8_lossy(&output.stderr);
+        if err_str.contains("cl.exe") {
+            println!("cargo:warning=NVCC could not find cl.exe (MSVC). CUDA kernels skipped (Non-fatal).");
+        } else {
+            println!("cargo:warning=Failed to compile CUDA kernel. Using dummy PTX. Error: {}", err_str);
+        }
         std::fs::write(&output_ptx, "")?;
     } else {
         println!(

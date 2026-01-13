@@ -130,30 +130,9 @@ pub fn run(args: TrainArgs) -> Result<()> {
         anyhow::bail!("❌ Training dataset is empty! Please check your input files and run Preprocessing again.");
     }
 
-    let project_config = crate::config::ProjectConfig {
-        name: "Training Run".to_string(),
-        created_at: chrono::Local::now().to_string(),
-        vocab_size,
-        model_type: crate::vocab::ModelType::Unigram,
-        val_ratio: 0.05,
-        model_dim: args.dim,
-        layers: args.layers,
-        context_len: args.context_len,
-        n_heads: 8,
-        batch_size: args.batch_size,
-        steps: args.steps,
-        lr: args.lr,
-        min_lr: args.min_lr,
-        warmup_steps: args.warmup_steps,
-        save_interval: args.save_interval,
-        input_pattern: "N/A".to_string(),
-        template: "".to_string(),
-        use_template: false,
-        inference_temp: 0.8,
-        inference_max_tokens: 100,
-        accum_steps: args.accum.max(1),
-        profile: "consumer".to_string(),
-    };
+    let mut project_config = crate::config::ProjectConfig::from_args(&args);
+    // Override fields not present in TrainArgs
+    project_config.vocab_size = vocab_size;
 
     let config = project_config.to_bit_llama_config(0.1);
 

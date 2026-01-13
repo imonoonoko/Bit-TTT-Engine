@@ -22,7 +22,9 @@ pub struct ProjectConfig {
     pub layers: usize,
     pub context_len: usize,
     #[serde(default)]
-    pub n_heads: usize, // Added
+    pub n_heads: usize,
+    #[serde(default)]
+    pub n_kv_heads: Option<usize>, // Added for GQA
     // Training Hyperparameters
     pub batch_size: usize,
     pub steps: usize,
@@ -77,6 +79,7 @@ impl Default for ProjectConfig {
             layers: 4,        // train_llama.rs default
             context_len: 128, // train_llama.rs default
             n_heads: 8,       // Default
+            n_kv_heads: None, // Default to MHA (Same as n_heads)
             batch_size: 32,
             steps: 10000,
             lr: 1e-3,
@@ -95,6 +98,34 @@ impl Default for ProjectConfig {
 }
 
 impl ProjectConfig {
+    pub fn from_args(args: &crate::train::TrainArgs) -> Self {
+        Self {
+            name: "Training Run".to_string(),
+            created_at: chrono::Local::now().to_string(),
+            vocab_size: 8000, // Should be updated manually if different or inferred
+            model_type: ModelType::Unigram,
+            val_ratio: 0.05,
+            model_dim: args.dim,
+            layers: args.layers,
+            context_len: args.context_len,
+            n_heads: 8,
+            n_kv_heads: None, // Default to MHA
+            batch_size: args.batch_size,
+            steps: args.steps,
+            lr: args.lr,
+            min_lr: args.min_lr,
+            warmup_steps: args.warmup_steps,
+            save_interval: args.save_interval,
+            accum_steps: args.accum.max(1),
+            profile: "consumer".to_string(),
+            input_pattern: "N/A".to_string(),
+            template: "".to_string(),
+            use_template: false,
+            inference_temp: default_temp(),
+            inference_max_tokens: default_max_tokens(),
+        }
+    }
+
     pub fn to_bit_llama_config(&self, inner_lr: f64) -> cortex_rust::BitLlamaConfig {
         cortex_rust::BitLlamaConfig {
             vocab_size: self.vocab_size,
@@ -106,56 +137,83 @@ impl ProjectConfig {
     }
 
     pub fn estimate_vram_usage(&self) -> (f32, String, egui::Color32) {
-        // Approximate calculation
-        // Params: Layers * 12 * Dim^2 (Rough Llama approximation)
-        let params = (self.layers as f64) * 12.0 * (self.model_dim as f64).powi(2);
+        let eff = self.estimate_efficiency();
+        (eff.bit_ttt_mb as f32, eff.status, eff.color)
+    }
 
-        // Memory Factor based on Profile
-        // Server (AdamW + FP16): Weights(2) + Grad(2) + Adam(8) + Overhead = ~12-16 bytes
-        // Consumer (SFO + BitNet): Weights(1) + Grad(2) + SFO(4) = ~7 bytes
-        let bytes_per_param = if self.profile == "server" {
-            16.0
-        } else {
-            7.0 // Conservative estimate for SFO + BitNet
-        };
+    pub fn estimate_efficiency(&self) -> VramEfficiencyMetrics {
+        // Param Count (Approximation for Llama)
+        let d = self.model_dim as f64;
+        let l = self.layers as f64;
+        let v = self.vocab_size as f64;
 
-        let model_mem_bytes = params * bytes_per_param;
+        // Params
+        let params_layer = 16.0 * d * d;
+        let params_embed = 2.0 * v * d; // Token Embed + Output Head
+        let total_params = (l * params_layer) + params_embed;
 
-        // Activations (rough approximation)
-        // Consumer profile usually uses Gradient Checkpointing (implied)?
-        // Or we just assume MicroBatch=1.
-        // We use batch_size as "Logical Batch Size".
-        // Real VRAM usage depends on MicroBatch.
-        // If profile=consumer, we assume micro_batch = 1.
-        // If profile=server, we assume micro_batch = batch_size.
+        // --- Bit-TTT Cost (Inference / Deployment) ---
+        // VRAM = Weights(1.58bit) + KV Cache + Overhead
+        // 1.58 bits ≈ 0.25 bytes (packed).
+        // We add some buffer for quantization metadata/scales (~0.05).
+        let bytes_bitttt = 0.3;
 
-        let micro_batch = if self.profile == "server" {
-            self.batch_size as f64
-        } else {
-            1.0 // Consumer mode always runs micro-batch 1 to save VRAM
-        };
+        // --- FP16 Transformer Cost (Inference / Deployment) ---
+        // VRAM = Weights(16bit) + KV Cache + Overhead
+        // 16 bits = 2.0 bytes.
+        let bytes_fp16 = 2.0;
 
-        let activation_bytes = micro_batch
-            * (self.context_len as f64)
-            * (self.model_dim as f64)
-            * (self.layers as f64)
-            * 12.0; // Factor for Attention/FFN overhead
+        // Context / Activation (KV Cache for Inference)
+        // KV Size = 2(K+V) * Layers * (KV_Dim) * Context * (Bytes per Element)
+        // FP16 KV = 2 bytes.
+        let ctx_len = self.context_len as f64;
+        let d = self.model_dim as f64;
+        let l = self.layers as f64;
+        let heads = self.n_heads.max(1) as f64;
+        let kv_heads = self.n_kv_heads.unwrap_or(self.n_heads).max(1) as f64;
 
-        // Overhead for Kernels/Workspace
-        let overhead_bytes = 512.0 * 1024.0 * 1024.0; // 512MB
+        // Effective KV dimension due to GQA/MQA
+        // If n_kv_heads < n_heads, the key/value states are shared across heads
+        let kv_dim = (d / heads) * kv_heads;
 
-        let total_mb = (model_mem_bytes + activation_bytes + overhead_bytes) / (1024.0 * 1024.0);
+        let kv_bytes_per_token = 2.0 * l * kv_dim * 2.0; // 2(K+V) * Layers * KV_Dim * 2(FP16)
+        let kv_total_mb = (kv_bytes_per_token * ctx_len) / (1024.0 * 1024.0);
 
-        let (status, color) = if total_mb < 8000.0 {
+        // Totals
+        let model_mb_bitttt = (total_params * bytes_bitttt) / (1024.0 * 1024.0);
+        let model_mb_fp16 = (total_params * bytes_fp16) / (1024.0 * 1024.0);
+
+        let overhead_mb = 256.0; // Runtime overhead (CUDA/PyTorch/Candle)
+
+        let total_bitttt = model_mb_bitttt + kv_total_mb + overhead_mb;
+        let total_fp16 = model_mb_fp16 + kv_total_mb + overhead_mb;
+
+        let (status, color) = if total_bitttt < 8000.0 {
             ("Safe (< 8GB)", egui::Color32::GREEN)
-        } else if total_mb < 12000.0 {
-            ("Moderate (< 12GB)", egui::Color32::from_rgb(255, 165, 0)) // Orange
-        } else if total_mb < 24000.0 {
-            ("High (Requires 24GB)", egui::Color32::from_rgb(255, 69, 0)) // Red-Orange
+        } else if total_bitttt < 12000.0 {
+            ("Moderate (< 12GB)", egui::Color32::from_rgb(255, 165, 0))
+        } else if total_bitttt < 24000.0 {
+            ("High (< 24GB)", egui::Color32::from_rgb(255, 69, 0))
         } else {
             ("Critical (> 24GB)", egui::Color32::RED)
         };
 
-        (total_mb as f32, status.to_string(), color)
+        VramEfficiencyMetrics {
+            bit_ttt_mb: total_bitttt,
+            fp16_mb: total_fp16,
+            saved_mb: total_fp16 - total_bitttt,
+            saved_ratio: if total_bitttt > 0.0 { total_fp16 / total_bitttt } else { 0.0 },
+            status: status.to_string(),
+            color,
+        }
     }
+}
+
+pub struct VramEfficiencyMetrics {
+    pub bit_ttt_mb: f64,
+    pub fp16_mb: f64,
+    pub saved_mb: f64,
+    pub saved_ratio: f64,
+    pub status: String,
+    pub color: egui::Color32,
 }

@@ -3,7 +3,6 @@
 members = [
     "crates/rust_engine",
     "crates/bit_llama",
-    "crates/rust_engine/fuzz",
 ]
 
 resolver = "2"
