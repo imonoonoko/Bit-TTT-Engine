@@ -43,4 +43,7 @@ pub struct TrainArgs {
 
     #[arg(long, action)]
     pub benchmark: bool,
+
+    #[arg(long, default_value_t = 1)]
+    pub accum: usize,
 }

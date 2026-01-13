@@ -17,6 +17,8 @@ use tokenizers::processors::byte_level::ByteLevel as ByteLevelPost;
 use tokenizers::processors::PostProcessorWrapper;
 use tokenizers::{AddedToken, TokenizerImpl};
 
+use crate::data::sampler::ParallelSampler;
+
 #[derive(Debug, Clone, ValueEnum, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum ModelType {
     Bpe,
@@ -40,6 +42,10 @@ pub struct VocabArgs {
 
     #[arg(long, value_enum, default_value_t = ModelType::Unigram)]
     pub model_type: ModelType,
+
+    /// Limit input to first N Megabytes (Optimized for speed)
+    #[arg(long)]
+    pub limit_mb: Option<usize>,
 }
 
 pub fn run(args: VocabArgs) -> Result<()> {
@@ -76,6 +82,11 @@ fn prepare_files(args: &VocabArgs) -> Result<Vec<String>> {
         println!("Training on {} files...", files.len());
         files
     };
+    if let Some(limit_mb) = args.limit_mb {
+        let sample_path = Path::new(&args.output).parent().unwrap().join("corpus_sample.txt");
+        return ParallelSampler::sample(files_to_train, sample_path, limit_mb);
+    }
+
     Ok(files_to_train)
 }
 
@@ -197,6 +208,7 @@ mod tests {
             vocab_size: 100, // Small vocab for small data
             min_frequency: 1,
             model_type: ModelType::Unigram,
+            limit_mb: None,
         };
 
         // Run training

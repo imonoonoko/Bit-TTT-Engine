@@ -10,6 +10,7 @@ pub mod device_utils;
 pub mod kernels;
 pub mod layers;
 pub mod model;
+pub mod optim;
 pub mod python;
 
 // Primary public API re-exports

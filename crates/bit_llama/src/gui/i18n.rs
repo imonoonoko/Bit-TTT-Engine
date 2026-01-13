@@ -71,6 +71,8 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (Language::English, "collect_raw") => "1. Collect Raw Material",
         (Language::Japanese, "open_raw_folder") => "📂 raw/ フォルダを開く",
         (Language::English, "open_raw_folder") => "📂 Open raw/ folder",
+        (Language::Japanese, "use_raw_folder") => "🏠 プロジェクトのrawフォルダを使う",
+        (Language::English, "use_raw_folder") => "🏠 Use Project's raw folder",
         (Language::Japanese, "place_txt_here") => "← .txt ファイルをここに配置",
         (Language::English, "place_txt_here") => "← Place .txt files here",
         (Language::Japanese, "concat_corpus") => "2. 結合 (コーパス作成)",

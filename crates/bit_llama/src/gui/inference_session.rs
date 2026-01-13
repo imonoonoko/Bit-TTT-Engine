@@ -30,13 +30,17 @@ impl InferenceSession {
         self.active_process.is_some()
     }
 
-    pub fn spawn(&mut self, model_path: &str) -> anyhow::Result<()> {
+    pub fn spawn(&mut self, model_path: &str, temp: f64, max_tokens: usize) -> anyhow::Result<()> {
         let exe = std::env::current_exe()?;
         let mut command = Command::new(exe);
         command
             .arg("inference")
             .arg("--model")
             .arg(model_path)
+            .arg("--temp")
+            .arg(temp.to_string())
+            .arg("--max-tokens")
+            .arg(max_tokens.to_string())
             .stdout(Stdio::piped())
             .stdin(Stdio::piped())
             .stderr(Stdio::piped());

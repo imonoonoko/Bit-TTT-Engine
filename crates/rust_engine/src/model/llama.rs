@@ -173,9 +173,33 @@ impl BitLlama {
         let mut h = self.embedding.forward(x)?;
 
         for (i, layer) in self.layers.iter().enumerate() {
-            let (h_new, w_final) = layer.forward_chunkwise(&h, &w_states[i], chunk_size)?;
-            h = h_new;
+            // Hybrid Logic: Ensure input 'h' is on the layer's device
+            let layer_device = layer.norm1.weight.device();
+            let h_device = h.device();
+
+            let h_in = if h_device.same_device(layer_device) {
+                std::borrow::Cow::Borrowed(&h)
+            } else {
+                std::borrow::Cow::Owned(h.to_device(layer_device)?)
+            };
+
+            // w_states[i] must also be on layer device
+            let w_state = &w_states[i];
+            let w_device = w_state.device();
+            let w_in = if w_device.same_device(layer_device) {
+                std::borrow::Cow::Borrowed(w_state)
+            } else {
+                std::borrow::Cow::Owned(w_state.to_device(layer_device)?)
+            };
+
+            let (h_new, w_final) = layer.forward_chunkwise(&h_in, &w_in, chunk_size)?;
+
+            // w_final is on layer_device. Store it back.
+            // If we want w_states to stay on their respective devices, this is fine.
             w_states[i] = w_final;
+
+            // h propagates on this device. Next layer will move it if needed.
+            h = h_new;
         }
 
         let h_norm = self.norm.forward(&h)?;

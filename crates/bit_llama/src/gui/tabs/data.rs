@@ -30,8 +30,22 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
 
     ui.group(|ui| {
         ui.heading(t(language, "concat_corpus"));
-        if ui.button(t(language, "concat_btn")).clicked() {
-            project.concat_txt_files();
+
+        let is_concatenating = project.is_running && project.status_message.contains("Concatenating");
+
+        if is_concatenating {
+             ui.horizontal(|ui| {
+                 ui.spinner();
+                 ui.label(t(language, "processing")); // Reusing generic processing string or just hardcode for now
+                 if ui.button("🛑 Cancel").clicked() {
+                     project.cancel_concat();
+                 }
+             });
+        } else {
+             // Disable if other process is running
+             if ui.add_enabled(!project.is_running, egui::Button::new(t(language, "concat_btn"))).clicked() {
+                project.concat_txt_files();
+             }
         }
 
         if project.has_corpus {
@@ -66,6 +80,8 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
             ui.add(egui::DragValue::new(&mut project.config.vocab_size).clamp_range(100..=65535))
                 .on_hover_text(t_tooltip(language, "vocab_size"));
         });
+
+        ui.checkbox(&mut project.fast_vocab, "⚡ Fast Mode (Sample 100MB)");
         ui.add_space(5.0);
 
         if ui.button(t(language, "start_tokenizer")).clicked() {
@@ -88,20 +104,24 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
 
             let exe = env::current_exe().unwrap_or_default();
             let exe_str = exe.to_string_lossy().to_string();
-            project.run_command(
-                &exe_str,
-                &[
-                    "vocab",
-                    "--input",
-                    &corpus_path,
-                    "--vocab-size",
-                    &vocab_str,
-                    "--output",
-                    &output_path,
-                    "--model-type",
-                    model_type_str,
-                ],
-            );
+            let mut cmd_args = vec![
+                "vocab",
+                "--input",
+                &corpus_path,
+                "--vocab-size",
+                &vocab_str,
+                "--output",
+                &output_path,
+                "--model-type",
+                model_type_str,
+            ];
+
+            if project.fast_vocab {
+                cmd_args.push("--limit-mb");
+                cmd_args.push("100");
+            }
+
+            project.run_command(&exe_str, &cmd_args);
         }
 
         if project.has_tokenizer {
@@ -139,13 +159,27 @@ pub fn show_preprocessing(ui: &mut egui::Ui, project: &mut ProjectState, languag
                     project.matched_file_count = None;
                 }
             }
+            if ui.button(t(language, "use_raw_folder")).clicked() {
+                 // Use relative path for cleaner UI
+                 project.config.input_pattern = format!("projects/{}/raw/*", project.config.name);
+                 project.matched_file_count = None;
+            }
 
             // Performance Logic: Run glob only on change or if cache is missing
             if response.changed() || project.matched_file_count.is_none() {
                  if !project.config.input_pattern.is_empty() {
                      match glob(&project.config.input_pattern) {
                          Ok(paths) => {
-                             project.matched_file_count = Some(paths.count());
+                             // Filter extensions to match backend logic
+                             let valid_exts = ["json", "jsonl", "txt", "md"];
+                             let count = paths.filter_map(Result::ok).filter(|p| {
+                                 if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
+                                     valid_exts.contains(&ext)
+                                 } else {
+                                     false
+                                 }
+                             }).count();
+                             project.matched_file_count = Some(count);
                          },
                          Err(_) => {
                              project.matched_file_count = None;

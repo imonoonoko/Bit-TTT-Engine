@@ -51,3 +51,21 @@
 2026-01-12T19:49:05.371295Z  INFO bit_llama::train::training_loop: ✅ Model saved to: pre_demon_test/model.safetensors
 2026-01-12T19:49:05.371499Z  INFO bit_llama::train::training_loop: ✅ Project Config saved to: pre_demon_test/project.json
 2026-01-12T19:49:05.371676Z  INFO bit_llama::train::training_loop: ✅ Model Config saved to: pre_demon_test/config.json
+2026-01-12T19:58:04.768988Z  INFO bit_llama: 🚀 Bit-Llama started.
+2026-01-12T19:58:05.035340Z  INFO bit_llama::gui: [GUI] Loading bundled font: NotoSansJP-Regular.ttf
+2026-01-12T19:58:05.035630Z  INFO bit_llama::gui: [GUI] Fonts initialized.
+2026-01-12T19:59:19.273083Z  INFO bit_llama: 🚀 Bit-Llama started.
+2026-01-12T19:59:19.494979Z  INFO bit_llama::gui: [GUI] Loading bundled font: NotoSansJP-Regular.ttf
+2026-01-12T19:59:19.495029Z  INFO bit_llama::gui: [GUI] Fonts initialized.
+2026-01-12T20:44:18.577773Z  INFO bit_llama: 🚀 Bit-Llama started.
+2026-01-12T20:44:18.800220Z  INFO bit_llama::gui: [GUI] Loading bundled font: NotoSansJP-Regular.ttf
+2026-01-12T20:44:18.800269Z  INFO bit_llama::gui: [GUI] Fonts initialized.
+2026-01-12T20:50:27.587345Z  INFO bit_llama: 🚀 Bit-Llama started.
+2026-01-12T20:50:27.832522Z  INFO bit_llama::gui: [GUI] Loading bundled font: NotoSansJP-Regular.ttf
+2026-01-12T20:50:27.832566Z  INFO bit_llama::gui: [GUI] Fonts initialized.
+2026-01-12T20:55:04.570079Z  INFO bit_llama: 🚀 Bit-Llama started.
+2026-01-12T20:55:04.708559Z  INFO bit_llama::gui: [GUI] Loading bundled font: NotoSansJP-Regular.ttf
+2026-01-12T20:55:04.708608Z  INFO bit_llama::gui: [GUI] Fonts initialized.
+2026-01-12T20:57:12.621975Z  INFO bit_llama: 🚀 Bit-Llama started.
+2026-01-12T20:57:12.844323Z  INFO bit_llama::gui: [GUI] Loading bundled font: NotoSansJP-Regular.ttf
+2026-01-12T20:57:12.844377Z  INFO bit_llama::gui: [GUI] Fonts initialized.

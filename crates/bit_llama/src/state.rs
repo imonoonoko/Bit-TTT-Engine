@@ -7,11 +7,13 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use crate::config::ProjectConfig;
+use crate::data::concat::Concatenator;
 
 // Runtime State (Not saved to disk)
 pub struct ProjectState {
@@ -37,6 +39,10 @@ pub struct ProjectState {
 
     // UI Cache (Not persisted)
     pub matched_file_count: Option<usize>,
+    pub fast_vocab: bool,
+
+    // Async Control
+    pub concat_cancel_flag: Arc<AtomicBool>,
 }
 
 // Shared State (for UI updates)
@@ -83,6 +89,8 @@ impl ProjectState {
             download_progress: Arc::new(Mutex::new(0.0)),
             download_status: Arc::new(Mutex::new(String::new())),
             matched_file_count: None,
+            fast_vocab: true, // Default to optimized training
+            concat_cancel_flag: Arc::new(AtomicBool::new(false)),
         };
         state.check_files();
         state
@@ -114,7 +122,7 @@ impl ProjectState {
     /// Should be called from the main UI thread.
     pub fn drain_logs(&mut self) {
         while let Ok(msg) = self.log_rx.try_recv() {
-            if msg == "<<PREPROCESS_DONE>>" {
+            if msg == "<<PREPROCESS_DONE>>" || msg == "<<CONCAT_DONE>>" {
                 self.is_running = false;
                 self.status_message = "Ready".to_string();
                 self.check_files(); // Refresh file status
@@ -134,6 +142,13 @@ impl ProjectState {
         let mut data_points = Vec::new();
 
         while let Ok(msg) = self.log_rx.try_recv() {
+            // Check for completion signal
+            if msg.contains("<<PREPROCESS_DONE>>") || msg.contains("<<CONCAT_DONE>>") {
+                self.is_running = false;
+                self.status_message = "Ready".to_string();
+                self.check_files();
+            }
+
             // Try to extract step and loss from log line
             if let Some((step, loss)) = Self::parse_training_log(&msg) {
                 data_points.push((step, loss));
@@ -256,37 +271,34 @@ impl ProjectState {
     }
 
     pub fn concat_txt_files(&mut self) {
-        self.log("Starting corpus concatenation...");
+        self.log("Starting corpus concatenation (Async)...");
+        self.is_running = true;
+        self.status_message = "Concatenating files...".to_string();
 
         let raw_dir = self.path.join("raw");
-        let output_path = self.path.join("data/corpus.txt");
-
-        let mut count = 0;
-        let mut total_bytes = 0;
-
-        if let Ok(entries) = fs::read_dir(&raw_dir) {
-            if let Ok(mut out_file) = fs::File::create(&output_path) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.extension().map_or(false, |ext| ext == "txt") {
-                        if let Ok(content) = fs::read(&path) {
-                            if let Err(e) = out_file.write_all(&content) {
-                                self.log(&format!("Write error: {}", e));
-                            }
-                            let _ = out_file.write_all(b"\n");
-                            count += 1;
-                            total_bytes += content.len();
-                        }
-                    }
-                }
-            }
+        if !raw_dir.exists() {
+             self.log(&format!("❌ 'raw' directory not found at: {:?}", raw_dir));
+             self.is_running = false;
+             return;
         }
 
-        self.log(&format!(
-            "✅ Concatenated {} files in {:.2} MB.",
-            count,
-            total_bytes as f64 / 1_048_576.0
-        ));
-        self.check_files();
+        let output_path = self.path.join("data/corpus.txt");
+        let raw_str = raw_dir.to_string_lossy().replace("\\", "/");
+        let pattern = format!("{}/**/*", raw_str);
+
+        // Reset Cancel Flag
+        self.concat_cancel_flag.store(false, Ordering::SeqCst);
+
+        Concatenator::new(
+            pattern,
+            output_path,
+            self.concat_cancel_flag.clone(),
+            self.log_tx.clone(),
+        ).run();
+    }
+
+    pub fn cancel_concat(&self) {
+        self.concat_cancel_flag.store(true, Ordering::SeqCst);
+        self.log("Signal sent: Cancelling concatenation...");
     }
 }

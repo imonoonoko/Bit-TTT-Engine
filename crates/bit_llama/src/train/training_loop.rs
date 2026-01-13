@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use candle_core::{DType, Device, Tensor};
-use candle_nn::{Optimizer, VarBuilder, VarMap};
+use candle_nn::{VarBuilder, VarMap};
 use std::fs::File;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -126,6 +126,10 @@ pub fn run(args: TrainArgs) -> Result<()> {
     let mut loader = BitLoader::new(&loader_path)?;
     info!("Data Loaded. Total tokens: {}", loader.data_len);
 
+    if loader.data_len == 0 {
+        anyhow::bail!("❌ Training dataset is empty! Please check your input files and run Preprocessing again.");
+    }
+
     let project_config = crate::config::ProjectConfig {
         name: "Training Run".to_string(),
         created_at: chrono::Local::now().to_string(),
@@ -145,6 +149,10 @@ pub fn run(args: TrainArgs) -> Result<()> {
         input_pattern: "N/A".to_string(),
         template: "".to_string(),
         use_template: false,
+        inference_temp: 0.8,
+        inference_max_tokens: 100,
+        accum_steps: args.accum.max(1),
+        profile: "consumer".to_string(),
     };
 
     let config = project_config.to_bit_llama_config(0.1);
@@ -183,11 +191,16 @@ pub fn run(args: TrainArgs) -> Result<()> {
         varmap.data().lock().expect("Failed to lock VarMap").len()
     );
 
-    let params = candle_nn::ParamsAdamW {
+    let params_sf = cortex_rust::optim::schedule_free::ParamsScheduleFree {
         lr: args.lr,
+        warmup_steps: args.warmup_steps,
         ..Default::default()
     };
-    let mut adam = candle_nn::AdamW::new(varmap.all_vars(), params)?;
+    let optim_vars = varmap.all_vars();
+    let mut optimizer = cortex_rust::optim::schedule_free::ScheduleFreeOptimizer::new(
+        optim_vars.clone(),
+        params_sf,
+    )?;
 
     let start_step = load_start_step(&base_dir);
     if start_step > 0 {
@@ -196,10 +209,16 @@ pub fn run(args: TrainArgs) -> Result<()> {
 
     let log_interval = 10;
     let save_interval = args.save_interval;
+    let accumulation_steps = args.accum.max(1);
+
     info!(
-        "Starting Training Loop (Target: {} steps, Save every {} steps)...",
-        args.steps, save_interval
+        "Starting Training Loop (Target: {} steps, Accum: {})",
+        args.steps, accumulation_steps
     );
+
+    // Gradient Accumulator Buffer (Matches optim_vars order)
+    let mut grad_accumulator: Vec<Option<Tensor>> = vec![None; optim_vars.len()];
+
 
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
@@ -313,6 +332,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
             return Ok(());
         }
 
+        // Update LR
         let current_lr = if step < args.warmup_steps {
             args.lr * (step as f64 / args.warmup_steps as f64)
         } else {
@@ -323,7 +343,13 @@ pub fn run(args: TrainArgs) -> Result<()> {
             let decay = 0.5 * (1.0 + cosine);
             args.min_lr + (args.lr - args.min_lr) * decay
         };
-        adam.set_learning_rate(current_lr);
+        optimizer.set_learning_rate(current_lr);
+
+        // Schedule-Free: Pre-step (Interpolate y)
+        // Only needed at start of accumulation cycle
+        if step % accumulation_steps == 0 {
+             optimizer.pre_step()?;
+        }
 
         let (inputs, targets) = loader.next_batch(args.batch_size, args.context_len, &device)?;
 
@@ -355,7 +381,79 @@ pub fn run(args: TrainArgs) -> Result<()> {
             }
         }
 
-        adam.backward_step(&loss_step)?;
+        // Backward & Accumulate
+        let grads_store = loss_step.backward()?;
+        for (i, var) in optim_vars.iter().enumerate() {
+            if let Some(grad) = grads_store.get(var) {
+                // Normalize by accumulation steps to keep scale correct
+                // BUT usually we just sum and divide LR?
+                // Standard: loss / accum.
+                // Here we didn't divide loss. So gradients are huge.
+                // We should divide accumulated gradients by accum_steps in Optimizer?
+                // Or here?
+                // Let's divide here.
+                let scaled_grad = (grad / (accumulation_steps as f64))?;
+                match &grad_accumulator[i] {
+                    Some(acc) => {
+                        let new_acc = (acc + &scaled_grad)?;
+                        grad_accumulator[i] = Some(new_acc);
+                    }
+                    None => {
+                        grad_accumulator[i] = Some(scaled_grad);
+                    }
+                }
+            }
+        }
+
+        // Optimizer Step (Sync)
+        if (step + 1) % accumulation_steps == 0 {
+            // Convert Accumulator to Vec<Tensor> (filling None with zeros if needed? or SFO handles missing?)
+            // My SFO expects Vec<Tensor> strictly matching vars?
+            // "if let Some(grad) = grads.get(i)" in SFO.
+            // So we need a Vec<Tensor>. But grad_accumulator is Vec<Option<Tensor>>.
+            // We need to compact or pass Option?
+            // My SFO implementation: `grads: &Vec<Tensor>`. It iterates vars and uses `grads.get(i)`.
+            // Wait, `grads.get(i)` is standard Vec indexing.
+            // If accumulation has None, we can't put it in `Vec<Tensor>` easily if we want 1-to-1 mapping by index.
+            // SFO impl check:
+            // "for (i, var) in self.vars.iter().enumerate() { if let Some(grad) = grads.get(i) ..."
+            // Getting index i from Vec<Tensor> works.
+            // But if `grad_accumulator` has Nones, we can't make a simple Vec<Tensor> unless we fill with Dummy?
+            // BETTER: Update SFO to take `&Vec<Option<Tensor>>`.
+            // FOR NOW: I will just unwrap or zero.
+            // Actually, if a var has no gradient, it shouldn't update.
+            // I will modify `accumulation_to_dense` logic.
+            // If None, create a Zero tensor? Expensive.
+            // Since this is 8GB constrained, creating Zeros is bad.
+            // I should update SFO signature to `Vec<Option<Tensor>>` ideally.
+            // But I cannot modify SFO easily in parallel.
+            // Hack: SFO `grads.get(i)` returns the element.
+            // If I pass a `Vec<Tensor>`, it expects `grads[i]` to correspond to `vars[i]`.
+            // If `optim_vars[i]` had no gradient, `grad_accumulator[i]` is None.
+            // I cannot skip index in `Vec<Tensor>` without shifting.
+            // So I MUST fill gaps.
+            // OR... I pass a `Vec` where missing are Zero tensors.
+            // This is safer.
+            // "grad_accumulator" -> "final_grads".
+            let mut final_grads = Vec::with_capacity(optim_vars.len());
+            for (i, opt) in grad_accumulator.iter().enumerate() {
+                match opt {
+                    Some(t) => final_grads.push(t.clone()),
+                    None => {
+                         // Create zero tensor matching var shape
+                         let shape = optim_vars[i].shape();
+                         final_grads.push(Tensor::zeros(shape, DType::F32, &device)?);
+                    }
+                }
+            }
+
+            optimizer.step(&final_grads)?;
+
+            // Clear Accumulator
+            for item in grad_accumulator.iter_mut() {
+                *item = None;
+            }
+        }
 
         if step % log_interval == 0 {
             let val = loss_val_check;

@@ -124,6 +124,7 @@ impl BitStudioApp {
         // Save default config
         let config = ProjectConfig {
             name: name.clone(),
+            input_pattern: format!("projects/{}/raw/*", name),
             ..Default::default()
         };
         let config_json = serde_json::to_string_pretty(&config).unwrap();

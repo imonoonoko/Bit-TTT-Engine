@@ -25,6 +25,32 @@ pub fn show(
             "Dim: {} | Layers: {} | Context: {}",
             project.config.model_dim, project.config.layers, project.config.context_len
         ));
+
+        // Profile Selector
+        ui.horizontal(|ui| {
+            ui.label("Profile:");
+            egui::ComboBox::from_id_source("profile_selector")
+                .selected_text(&project.config.profile)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut project.config.profile, "consumer".to_string(), "Consumer (8GB VRAM)");
+                    ui.selectable_value(&mut project.config.profile, "server".to_string(), "Server (24GB+ VRAM)");
+                });
+        });
+
+        // Accumulation Steps
+        ui.horizontal(|ui| {
+             ui.label("Grad Accumulation:");
+             ui.add(egui::Slider::new(&mut project.config.accum_steps, 1..=64));
+        });
+        ui.small(format!("Effective Batch: {}", project.config.batch_size * project.config.accum_steps));
+
+        // VRAM Estimation Display
+        let (vram_mb, status, color) = project.config.estimate_vram_usage();
+        ui.horizontal(|ui| {
+            ui.label("Est. VRAM:");
+            ui.colored_label(color, format!("{:.0} MB ({})", vram_mb, status));
+        });
+
         ui.add_space(5.0);
         if ui.button(t(language, "change_in_settings")).clicked() {
             on_tab_change(AppTab::Settings);
@@ -50,6 +76,7 @@ pub fn show(
                     let min_lr = project.config.min_lr.to_string();
                     let warmup = project.config.warmup_steps.to_string();
                     let save_int = project.config.save_interval.to_string();
+                    let accum = project.config.accum_steps.to_string();
 
                     let exe = env::current_exe().unwrap_or_default();
                     let exe_str = exe.to_string_lossy().to_string();
@@ -79,6 +106,8 @@ pub fn show(
                             &batch,
                             "--save-interval",
                             &save_int,
+                            "--accum",
+                            &accum,
                         ],
                     );
                 }

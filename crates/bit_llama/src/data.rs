@@ -5,6 +5,8 @@ use std::path::PathBuf;
 pub mod clean;
 pub mod download;
 pub mod preprocess;
+pub mod concat;
+pub mod sampler;
 
 #[derive(Args, Debug, Clone)]
 pub struct DataArgs {
