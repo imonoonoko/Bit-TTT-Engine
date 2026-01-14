@@ -268,7 +268,8 @@ impl eframe::App for BitStudioApp {
                     ui.heading(format!("🚀 {}", project.config.name));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if project.is_running {
-                            let btn_text = if project.task_type == crate::state::TaskType::Training {
+                            let btn_text = if project.task_type == crate::state::TaskType::Training
+                            {
                                 "🛑 STOP (Save)"
                             } else {
                                 "🛑 STOP"
@@ -364,12 +365,13 @@ fn setup_custom_fonts(ctx: &egui::Context) {
             if std::path::Path::new(path).exists() {
                 if let Ok(data) = std::fs::read(path) {
                     tracing::info!("[GUI] Loading system font: {}", path);
-                    fonts.font_data.insert("sys_font".to_owned(), egui::FontData::from_owned(data).tweak(
-                        egui::FontTweak {
+                    fonts.font_data.insert(
+                        "sys_font".to_owned(),
+                        egui::FontData::from_owned(data).tweak(egui::FontTweak {
                             scale: 1.0,
                             ..Default::default()
-                        }
-                    ));
+                        }),
+                    );
 
                     // Append system font as fallback
                     fonts

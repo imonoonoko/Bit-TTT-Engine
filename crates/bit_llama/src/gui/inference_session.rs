@@ -89,19 +89,30 @@ impl InferenceSession {
                         let s = String::from_utf8_lossy(chunk);
 
                         // 1. Strip ANSI codes
-                        let s_no_ansi = regex::Regex::new(r"\x1B\[([0-9]{1,2}(;[0-9]{1,2})*)?m").unwrap().replace_all(&s, "");
+                        let s_no_ansi = regex::Regex::new(r"\x1B\[([0-9]{1,2}(;[0-9]{1,2})*)?m")
+                            .unwrap()
+                            .replace_all(&s, "");
 
                         // 2. Filter Garbage (Control Chars & Replacement Chars)
-                        let s_clean: String = s_no_ansi.chars().filter(|c| {
-                            // Keep newlines and tabs
-                            if *c == '\n' || *c == '\r' || *c == '\t' { return true; }
-                            // Remove other control chars (0x00-0x1F, 0x7F)
-                            if c.is_control() { return false; }
-                            // Remove Replacement Character (invalid UTF-8 result)
-                            if *c == '\u{FFFD}' { return false; }
-                            // Keep everything else
-                            true
-                        }).collect();
+                        let s_clean: String = s_no_ansi
+                            .chars()
+                            .filter(|c| {
+                                // Keep newlines and tabs
+                                if *c == '\n' || *c == '\r' || *c == '\t' {
+                                    return true;
+                                }
+                                // Remove other control chars (0x00-0x1F, 0x7F)
+                                if c.is_control() {
+                                    return false;
+                                }
+                                // Remove Replacement Character (invalid UTF-8 result)
+                                if *c == '\u{FFFD}' {
+                                    return false;
+                                }
+                                // Keep everything else
+                                true
+                            })
+                            .collect();
 
                         if !s_clean.is_empty() {
                             let _ = ev_tx_out.send(InferenceEvent::Output(s_clean));

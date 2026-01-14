@@ -19,11 +19,9 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
         ui.horizontal(|ui| {
             if ui.button(t(language, "open_raw_folder")).clicked() {
                 if let Ok(abs_path) = std::fs::canonicalize(project.path.join("raw")) {
-                    let _ = Command::new("explorer")
-                        .arg(abs_path)
-                        .spawn();
+                    let _ = Command::new("explorer").arg(abs_path).spawn();
                 } else {
-                     // Fallback if canonicalize fails (e.g. dir doesn't exist yet, though it should)
+                    // Fallback if canonicalize fails (e.g. dir doesn't exist yet, though it should)
                     let _ = Command::new("explorer")
                         .arg(project.path.join("raw"))
                         .spawn();

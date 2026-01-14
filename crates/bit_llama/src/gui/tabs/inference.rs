@@ -210,7 +210,11 @@ pub fn render(app: &mut BitStudioApp, ui: &mut egui::Ui) {
         .show(ui, |ui| {
             for msg in &app.chat_history {
                 // Role
-                ui.label(egui::RichText::new(format!("{}", msg.role)).strong().color(egui::Color32::LIGHT_BLUE));
+                ui.label(
+                    egui::RichText::new(format!("{}", msg.role))
+                        .strong()
+                        .color(egui::Color32::LIGHT_BLUE),
+                );
 
                 // Content (Wrapped)
                 ui.add(egui::Label::new(&msg.content).wrap(true));
