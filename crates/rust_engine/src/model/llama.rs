@@ -608,6 +608,87 @@ impl Llama {
         Ok(())
     }
 
+    /// Save the current TTT state (w_states) to a safetensors file
+    /// This acts as the "Soul File" or "Memory Card"
+    pub fn save_memory<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
+        use std::collections::HashMap;
+        let mut tensors = HashMap::new();
+
+        // 1. Save w_states
+        for (i, w) in self.w_states.iter().enumerate() {
+            tensors.insert(format!("w_state.{}", i), w.clone());
+        }
+
+        // 2. Save Metadata as a dummy tensor (Dimensions check is usually enough, but this adds safety)
+        // Storing hidden_dim and num_layers as a small tensor [hidden_dim, num_layers]
+        let meta = Tensor::new(
+            &[
+                self.model.config.hidden_dim as u32,
+                self.model.config.num_layers as u32,
+            ],
+            &self.device,
+        )?;
+        tensors.insert("meta_config".to_string(), meta);
+
+        candle_core::safetensors::save(&tensors, path)?;
+        Ok(())
+    }
+
+    /// Load TTT state from a file.
+    /// Performs strict validation to ensure the memory is compatible with the current body.
+    pub fn load_memory<P: AsRef<Path>>(&mut self, path: P) -> anyhow::Result<()> {
+        let path = path.as_ref();
+        let tensors = candle_core::safetensors::load(path, &self.device)?;
+
+        // 1. Validate Compatibility
+        if let Some(meta) = tensors.get("meta_config") {
+            let meta_vec = meta.to_vec1::<u32>()?;
+            if meta_vec.len() >= 2 {
+                let saved_dim = meta_vec[0] as usize;
+                let saved_layers = meta_vec[1] as usize;
+
+                if saved_dim != self.model.config.hidden_dim {
+                    anyhow::bail!(
+                        "Memory Incompatible: Saved hidden_dim={} but current model={}",
+                        saved_dim,
+                        self.model.config.hidden_dim
+                    );
+                }
+                if saved_layers != self.model.config.num_layers {
+                    anyhow::bail!(
+                        "Memory Incompatible: Saved layers={} but current model={}",
+                        saved_layers,
+                        self.model.config.num_layers
+                    );
+                }
+            }
+        } else {
+            // If no meta_config, we fall back to shape checking, but warn.
+            println!("[Warn] Loading legacy memory file (no meta_config found).");
+        }
+
+        // 2. Load w_states
+        for (i, w_target) in self.w_states.iter_mut().enumerate() {
+            let key = format!("w_state.{}", i);
+            if let Some(w_loaded) = tensors.get(&key) {
+                // Strict shape check
+                if w_loaded.dims() != w_target.dims() {
+                    anyhow::bail!(
+                        "Memory Shape Mismatch at Layer {}: File {:?}, Model {:?}",
+                        i,
+                        w_loaded.dims(),
+                        w_target.dims()
+                    );
+                }
+                *w_target = w_loaded.clone();
+            } else {
+                println!("[Warn] Layer {} missing in memory file. Keeping zeros.", i);
+            }
+        }
+
+        Ok(())
+    }
+
     fn sample_multinomial(probs: &[f32]) -> anyhow::Result<u32> {
         use rand::Rng;
         let mut rng = rand::thread_rng();

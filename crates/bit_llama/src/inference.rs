@@ -16,6 +16,10 @@ pub struct InferenceArgs {
 
     #[arg(short, long)]
     pub prompt: Option<String>,
+
+    /// Path to load initial TTT memory (.soul file)
+    #[arg(long)]
+    pub memory: Option<String>,
 }
 
 pub fn run(args: InferenceArgs) -> Result<()> {
@@ -30,6 +34,16 @@ pub fn run(args: InferenceArgs) -> Result<()> {
     })?;
 
     llama.model.precompute_packed()?;
+
+    // Load initial memory if specified
+    if let Some(mem_path) = &args.memory {
+        println!("Loading memory from: {}", mem_path);
+        if let Err(e) = llama.load_memory(mem_path) {
+            eprintln!("⚠️ Failed to load memory: {}", e);
+        } else {
+            println!("✅ Memory (.soul) loaded successfully!");
+        }
+    }
 
     println!("✅ Model Loaded!");
 
@@ -75,6 +89,31 @@ pub fn run(args: InferenceArgs) -> Result<()> {
         if prompt == "/reset" {
             llama.reset_state()?;
             println!("🔄 Context/Memory has been reset.");
+            continue;
+        }
+
+        if let Some(path) = prompt.strip_prefix("/save ") {
+            let mut path = path.trim().to_string();
+            // Automatically append .soul if no extension is provided
+            if !path.contains('.') {
+                path.push_str(".soul");
+            }
+
+            if let Err(e) = llama.save_memory(&path) {
+                println!("❌ Failed to save memory: {}", e);
+            } else {
+                println!("💾 Memory saved to: {}", path);
+            }
+            continue;
+        }
+
+        if let Some(path) = prompt.strip_prefix("/load ") {
+            let path = path.trim();
+            if let Err(e) = llama.load_memory(path) {
+                println!("❌ Failed to load memory: {}", e);
+            } else {
+                println!("📂 Memory loaded from: {}", path);
+            }
             continue;
         }
 

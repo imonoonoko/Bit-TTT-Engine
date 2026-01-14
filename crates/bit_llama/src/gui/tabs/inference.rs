@@ -75,6 +75,39 @@ pub fn render(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                     }
                 }
 
+                ui.separator();
+
+                // Soul Management
+                if ui.button("📂 Load Soul").clicked() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("Soul File", &["soul"])
+                        .pick_file()
+                    {
+                        let cmd = format!("/load {}", path.display());
+                        session.send_message(&cmd);
+                        app.chat_history.push(ChatMessage {
+                            role: "System".to_string(),
+                            content: format!("Requesting to load soul: {:?}", path),
+                        });
+                    }
+                }
+
+                if ui.button("💾 Save Soul").clicked() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("Soul File", &["soul"])
+                        .save_file()
+                    {
+                        let cmd = format!("/save {}", path.display());
+                        session.send_message(&cmd);
+                        app.chat_history.push(ChatMessage {
+                            role: "System".to_string(),
+                            content: format!("Requesting to save soul: {:?}", path),
+                        });
+                    }
+                }
+
+                ui.separator();
+
                 if ui.button("⏹ Unload Model").clicked() {
                     session.stop();
                     app.chat_history.push(ChatMessage {
