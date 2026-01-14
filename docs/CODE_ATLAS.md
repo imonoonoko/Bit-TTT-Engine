@@ -1,39 +1,27 @@
 # Code Atlas
 
-## 🧠 Brain (Python)
-See `docs/brain_architecture.md` (if exists) or `src/brain.py`.
+This document outlines the high-level structure of the Bit-TTT Engine.
+For detailed documentation in Japanese, see [DEVELOPER_GUIDE_JA.md](DEVELOPER_GUIDE_JA.md).
 
-## 🦀 Rust Engine (`crates/bit_llama`)
-Structure verified as of Phase 14.
+## 📂 Directory Structure
 
-### Core Modules
-| Module | File | Description |
-|---|---|---|
-| **Entry** | `src/main.rs` | CLI entry point. Sets up logging and dispatching. |
-| **Model** | `src/model.rs` | Bit-Llama architecture definition (Candle). |
-| **Train** | `src/train.rs` | Training loop and configuration. |
+### `crates/rust_engine` (Core Library)
+The heart of the engine. Implements the BitNet architecture and Python bindings.
+- **`src/python.rs`**: **PyO3 Bindings**. `PyTrainer`, `BitLlama` wrapper.
+- **`src/model/`**: `llama.rs` (Architecture), `config.rs`.
+- **`src/layers/`**: `bit_linear.rs` (1.58-bit), `ttt.rs` (Test-Time Training).
+- **`src/kernels/`**: AVX2 (Cpu) and CUDA kernels.
 
-### Rust Engine (`crates/rust_engine`)
-High-performance core library. `cortex_rust`.
+### `crates/bit_llama` (Application)
+CLI and GUI application logic.
+- **`src/gui/`**: Tauri-based GUI source.
+- **`src/train/`**: `training_loop.rs` (Main Loop), `checkpoint.rs`.
+- **`src/loader.rs`**: Fast dataset loading (`memmap2`).
 
-| Module | File | Description |
-|---|---|---|
-| **Kernels** | `kernels/` | Device operations (CPU/AVX, CUDA). |
-| - `packing.rs` | `PackedTensor` | 1.58-bit quantization logic & storage. |
-| - `cpu.rs` | `BitLinearCpu` | AVX2-optimized forward pass. |
-| **Layers** | `layers/` | NN modules (`BitLinear`, `RMSNorm`, `TTT`). |
+### `tools/`
+Utility scripts (PowerShell).
+- `BitLlama-Train.ps1`, `BitLlama-Chat.ps1`, `BitLlama-GUI.ps1`.
 
-
-### Data Pipeline (`src/data.rs`)
-The `data` command is a dispatcher for subcommands:
-
-| Subcommand | Implementation | Description |
-|---|---|---|
-| `download` | `src/data/download.rs` | Downloads datasets (e.g. Izumi-Lab Japanese sample). Uses `ureq`. |
-| `clean` | `src/data/clean.rs` | Text cleaning (Regex). Removes HTML, URL. |
-| `preprocess`| `src/data/preprocess.rs`| **Universal Parser**: Tokenizes JSONL/Raw via Jinja2 Templates. Supports Glob/Compression. |
-
-### Tokenizer (`src/vocab.rs`)
-Handles vocabulary training and loading.
-- Supports **BPE** (GPT-2 style) and **Unigram** (SentencePiece style).
-- Includes **NFKC** normalization for Japanese.
+### `docs/`
+- **`DEVELOPER_GUIDE_JA.md`**: **Main Developer Guide**.
+- **`archive/`**: Retired documents from previous phases.
