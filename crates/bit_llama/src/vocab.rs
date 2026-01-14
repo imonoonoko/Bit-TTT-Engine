@@ -132,6 +132,8 @@ fn train_bpe(args: VocabArgs) -> Result<()> {
         .build();
 
     println!("Starting training (BPE)...");
+    println!("⚠️  Note: This process is CPU/RAM intensive. It may take several minutes depending on corpus size.");
+    println!("⏳  Please wait...");
     tokenizer
         .train_from_files(&mut trainer, files)
         .map_err(|e| anyhow::anyhow!("{}", e))?;
@@ -171,6 +173,8 @@ fn train_unigram(args: VocabArgs) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to build Unigram trainer: {}", e))?;
 
     println!("Starting training (Unigram)...");
+    println!("⚠️  Note: This process is CPU/RAM intensive. It may take several minutes depending on corpus size.");
+    println!("⏳  Please wait...");
     tokenizer
         .train_from_files(&mut trainer, files)
         .map_err(|e| anyhow::anyhow!("{}", e))?;

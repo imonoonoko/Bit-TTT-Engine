@@ -169,6 +169,7 @@ impl eframe::App for BitStudioApp {
                 if let Some(child) = &mut project.active_process {
                     if let Ok(Some(_status)) = child.try_wait() {
                         project.is_running = false;
+                        project.task_type = crate::state::TaskType::None;
                         project.active_process = None;
                         project.log("Process finished.");
                         project.check_files();
@@ -267,6 +268,20 @@ impl eframe::App for BitStudioApp {
                     ui.heading(format!("🚀 {}", project.config.name));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if project.is_running {
+                            let btn_text = if project.task_type == crate::state::TaskType::Training {
+                                "🛑 STOP (Save)"
+                            } else {
+                                "🛑 STOP"
+                            };
+
+                            if ui.button(btn_text).clicked() {
+                                if project.task_type == crate::state::TaskType::Training {
+                                    project.request_stop();
+                                } else {
+                                    project.kill_process();
+                                    project.cancel_concat();
+                                }
+                            }
                             ui.spinner();
                             ui.label(
                                 egui::RichText::new("Running...").color(egui::Color32::YELLOW),
@@ -335,6 +350,46 @@ fn setup_custom_fonts(ctx: &egui::Context) {
         .entry(egui::FontFamily::Monospace)
         .or_default()
         .insert(0, "jp_font".to_owned());
+
+    // Windows Fallback: Load System Fonts (Meiryo > Yu Gothic UI > MS Gothic)
+    #[cfg(target_os = "windows")]
+    {
+        let candidates = [
+            "C:\\Windows\\Fonts\\meiryo.ttc",   // Meiryo (Best for UI)
+            "C:\\Windows\\Fonts\\yugothr.ttc",  // Yu Gothic Regular
+            "C:\\Windows\\Fonts\\msgothic.ttc", // MS Gothic (Fallback)
+        ];
+
+        for path in candidates {
+            if std::path::Path::new(path).exists() {
+                if let Ok(data) = std::fs::read(path) {
+                    tracing::info!("[GUI] Loading system font: {}", path);
+                    fonts.font_data.insert("sys_font".to_owned(), egui::FontData::from_owned(data).tweak(
+                        egui::FontTweak {
+                            scale: 1.0,
+                            ..Default::default()
+                        }
+                    ));
+
+                    // Append system font as fallback
+                    fonts
+                        .families
+                        .entry(egui::FontFamily::Proportional)
+                        .or_default()
+                        .push("sys_font".to_owned());
+
+                    fonts
+                        .families
+                        .entry(egui::FontFamily::Monospace)
+                        .or_default()
+                        .push("sys_font".to_owned());
+
+                    // Found one good font, stop looking
+                    break;
+                }
+            }
+        }
+    }
 
     ctx.set_fonts(fonts);
     tracing::info!("[GUI] Fonts initialized.");

@@ -28,33 +28,21 @@ impl BitLinearCuda {
 
         let device = input.device();
         if let Device::Cuda(cuda_dev) = device {
-            // use cudarc::driver::{CudaSlice, DevicePtr, LaunchAsync, LaunchConfig};
-            let _ = cuda_dev;
+            // ⚠️ FALLBACK: Dequantize to F16/F32 and compute on GPU
+            // This is slower than a custom kernel due to memory bandwidth (expanding bits to floats),
+            // but enables inference on CUDA without low-level kernel integration.
 
-            // 1. Get/Load Kernel
-            // Note: heavily simplified. In production, use lazy_static or a KernelCache in the Context.
-            // Loading PTX every time is slow.
-            // We need access to the underlying cudarc device correctly.
-            // Candle hides this. We might need `cuda_dev.cu_device()` logic if exposed.
+            // 1. Unpack weights (Currently happens on CPU via to_vec, then uploads)
+            // TODO: Optimize this by implementing unpack as a high-level Tensor op sequence on GPU
+            let w_dequant = weights.unpack(&Device::Cuda(cuda_dev.clone()))?;
 
-            // UNFORTUNATELY: candle-core 0.8.4 does NOT easily expose the raw cudarc wrapper
-            // or allow arbitrary kernel launching easily without unsafe hacks or forking candle.
+            // 2. Standard Matmul
+            // Input: [M, K], Weights: [N, K] -> Output: [M, N]
+            // We need to transpose weights for matmul: [M, K] x [K, N]
+            let w_t = w_dequant.t()?;
+            let output = input.matmul(&w_t)?;
 
-            // WORKAROUND: For Phase 15 POC, we might have to use `candle-core`'s `CustomOp1` if supported,
-            // or specialized Kernel.
-
-            // WAIT: Step 15-1 "Refactor BitLinear" might imply we build this INTO bit_linear.
-            // For now, let's just make this compilable and assume we can reach the device.
-
-            // Since we can't easily get the raw `CudaDevice` from `candle::Device::Cuda`,
-            // we will leave this as a "TODO: Integration" block.
-            // The logic below describes what needs to happen.
-
-            candle_core::bail!(
-                "Custom CUDA kernel launching requires internal access to Candle's CudaDevice. \
-            This is pending integration in Step 15-2. \
-            For now, please use the CPU path or dequantize."
-            );
+            Ok(output)
         } else {
             candle_core::bail!("BitLinearCuda called on non-CUDA device");
         }

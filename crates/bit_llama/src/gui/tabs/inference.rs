@@ -209,11 +209,13 @@ pub fn render(app: &mut BitStudioApp, ui: &mut egui::Ui) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             for msg in &app.chat_history {
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(format!("{}: ", msg.role)).strong());
-                    ui.label(&msg.content);
-                });
-                ui.add_space(5.0);
+                // Role
+                ui.label(egui::RichText::new(format!("{}", msg.role)).strong().color(egui::Color32::LIGHT_BLUE));
+
+                // Content (Wrapped)
+                ui.add(egui::Label::new(&msg.content).wrap(true));
+
+                ui.separator();
             }
         });
 }

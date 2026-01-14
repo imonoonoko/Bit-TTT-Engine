@@ -1,6 +1,7 @@
 # Bit-TTT Engine: High-Performance Brain Core
 
 [![Featured on Orynth](https://orynth.dev/api/badge/bit-ttt-engine?theme=dark&style=default)](https://orynth.dev/projects/bit-ttt-engine)
+
 On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www.geckoterminal.com)
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
@@ -37,6 +38,8 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
    # Auto-downloads a tiny 10M sample model and runs it.
    ```
 
+   ```
+
 ### Option B: Binary (Fastest)
 Ideal for just chatting.
 
@@ -44,6 +47,16 @@ Ideal for just chatting.
    ```bash
    ./launch_chat.bat
    ```
+
+---
+
+## 💻 System Requirements
+
+- **OS**: Windows 10 / 11 (64-bit)
+- **GPU**: NVIDIA GeForce GTX 10 Series (Pascal) or newer recommended.
+    - Requires **CUDA 12.x compatible Driver** (v530 or higher).
+    - **Note**: CUDA Toolkit installation is **NOT** required (Driver only).
+- **VRAM**: 6GB+ recommended.
 
 ---
 
@@ -93,6 +106,21 @@ maturin develop --release
 - **[ROADMAP.md](ROADMAP.md)**: Future Plans.
 
 ---
+
+## 🙏 Acknowledgments / 謝辞
+
+This project incorporates ideas and techniques inspired by and adapted from the DroPE method published by Sakana AI.
+
+**Original work:**
+*   **Title**: Extending the Context of Pretrained LLMs by Dropping Their Positional Embeddings
+*   **Authors**: Yoav Gelberg, Koshi Eguchi, Takuya Akiba, Edoardo Cetin
+*   **Source**: [arXiv:2512.12167](https://arxiv.org/abs/2512.12167) (Submitted on 13 Dec 2025)
+*   **License**: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+
+**Modifications / 改変点:**
+We have adapted the positional embedding dropping approach and recalibration concept for our Pure Rust-based, low-bit quantized Test-Time Training (TTT) engine (Bit-TTT-Engine / bit_llama). This includes re-implementation in Rust (no Python dependencies), integration with 1.58-bit quantization, and application to edge-device friendly real-time adaptation, which differs from the original Hugging Face / PyTorch-focused implementation.
+
+The rest of this project is licensed under the MIT License (see LICENSE file).
 
 ## 💖 Support
 **Solana Wallet**: `13ui3nmE7smmK3Pk8wyKb7RE6wHyMJCcWgCeMRRdoory`

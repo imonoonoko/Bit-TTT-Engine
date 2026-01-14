@@ -63,7 +63,7 @@ graph TD
 *   **Pure Rust Build**: `--no-default-features` オプションでPython/PyO3依存を排除し、純粋なRustバイナリとしてビルド可能。
 *   **Device Agnostic**: `cpu` (AVX) と `cuda` (GPU) を設定一つで切り替え可能。
 
-## 5. Hybrid Inference Strategy (Phase 15 Architecture)
+## 5. Hybrid Inference Strategy (v0.2.0 Hybrid Architecture)
 
 大規模モデル(70B+)をコンシューマ機で動かすため、**CPU/GPUハイブリッド推論** を実装しています。
 

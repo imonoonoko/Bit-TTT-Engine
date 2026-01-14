@@ -18,9 +18,16 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
         ui.heading(t(language, "collect_raw"));
         ui.horizontal(|ui| {
             if ui.button(t(language, "open_raw_folder")).clicked() {
-                let _ = Command::new("explorer")
-                    .arg(project.path.join("raw"))
-                    .spawn();
+                if let Ok(abs_path) = std::fs::canonicalize(project.path.join("raw")) {
+                    let _ = Command::new("explorer")
+                        .arg(abs_path)
+                        .spawn();
+                } else {
+                     // Fallback if canonicalize fails (e.g. dir doesn't exist yet, though it should)
+                    let _ = Command::new("explorer")
+                        .arg(project.path.join("raw"))
+                        .spawn();
+                }
             }
             ui.label(t(language, "place_txt_here"));
         });
@@ -128,7 +135,7 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
                 cmd_args.push("100");
             }
 
-            project.run_command(&exe_str, &cmd_args);
+            project.run_command(&exe_str, &cmd_args, crate::state::TaskType::Tokenizer);
         }
 
         if project.has_tokenizer {
@@ -167,8 +174,8 @@ pub fn show_preprocessing(ui: &mut egui::Ui, project: &mut ProjectState, languag
                 }
             }
             if ui.button(t(language, "use_raw_folder")).clicked() {
-                 // Use relative path for cleaner UI
-                 project.config.input_pattern = format!("projects/{}/raw/*", project.config.name);
+                 // Use relative path for cleaner UI (Corrected for Refactor V2)
+                 project.config.input_pattern = format!("workspace/projects/{}/raw/*", project.config.name);
                  project.matched_file_count = None;
             }
 
@@ -264,6 +271,7 @@ pub fn show_preprocessing(ui: &mut egui::Ui, project: &mut ProjectState, languag
             };
 
             project.is_running = true;
+            project.task_type = crate::state::TaskType::Preprocessing;
             project.status_message = "Running Preprocessing...".to_string();
             project.log("🚀 Starting Universal Preprocessing (Direct Thread)...");
 

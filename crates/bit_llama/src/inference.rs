@@ -13,6 +13,9 @@ pub struct InferenceArgs {
 
     #[arg(long, default_value_t = 0.8)]
     pub temp: f64,
+
+    #[arg(short, long)]
+    pub prompt: Option<String>,
 }
 
 pub fn run(args: InferenceArgs) -> Result<()> {
@@ -32,6 +35,23 @@ pub fn run(args: InferenceArgs) -> Result<()> {
 
     let mut current_temp = args.temp;
     let mut current_max_tokens = args.max_tokens;
+
+    // One-shot mode if prompt provided
+    if let Some(p) = &args.prompt {
+        println!("\n> {}", p);
+        println!("[Generating...]");
+        let callback = |token: &str| -> anyhow::Result<bool> {
+            print!("{}", token);
+            io::stdout().flush()?;
+            Ok(true)
+        };
+
+        match llama.stream_completion(p, current_max_tokens, current_temp, callback) {
+            Ok(_) => println!(),
+            Err(e) => println!("Error: {}", e),
+        }
+        return Ok(());
+    }
 
     loop {
         // Signal that we are ready for input (machine readable)

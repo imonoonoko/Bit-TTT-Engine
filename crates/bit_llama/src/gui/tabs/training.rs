@@ -173,6 +173,7 @@ pub fn show(
                             "--accum",
                             &accum,
                         ],
+                        crate::state::TaskType::Training,
                     );
                 }
             } else {

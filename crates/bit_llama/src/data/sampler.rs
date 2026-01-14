@@ -58,7 +58,7 @@ impl ParallelSampler {
                 let path = Path::new(path_str);
                 if let Ok(f) = std::fs::File::open(path) {
                     let mut reader = std::io::BufReader::with_capacity(1024 * 1024, f);
-                    let mut buffer = [0u8; 1024 * 1024]; // 1MB Chunk
+                    let mut buffer = vec![0u8; 1024 * 1024]; // 1MB Chunk (Heap allocated)
 
                     loop {
                         // Check global limit inside loop for large files (Atomic Relaxed is cheap)
@@ -69,7 +69,8 @@ impl ParallelSampler {
                         match reader.read(&mut buffer) {
                             Ok(0) => break, // EOF
                             Ok(n) => {
-                                if s.send(buffer[..n].to_vec()).is_err() {
+                                let valid_utf8 = String::from_utf8_lossy(&buffer[..n]);
+                                if s.send(valid_utf8.as_bytes().to_vec()).is_err() {
                                     break; // Channel closed
                                 }
                                 global_bytes.fetch_add(n, Ordering::Relaxed);

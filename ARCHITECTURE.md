@@ -63,7 +63,7 @@ graph TD
 *   **Pure Rust Build**: Can be compiled with `--no-default-features` to remove Python/PyO3 dependencies for embedded use.
 *   **Device Agnostic**: Supports `cpu` (AVX) and `cuda` (GPU) via simple config switch.
 
-## 5. Hybrid Inference Strategy (Phase 15 Architecture)
+## 5. Hybrid Inference Strategy (v0.2.0 Hybrid Architecture)
 
 To run large models (70B+) on consumer hardware, we implement **CPU/GPU Hybrid Inference**.
 

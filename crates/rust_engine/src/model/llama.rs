@@ -123,7 +123,7 @@ impl BitLlama {
     /// Forward for single token (inference)
     #[allow(dead_code)]
     pub fn forward_one(&self, x: &Tensor, w_states: &mut [Tensor]) -> Result<Tensor> {
-        let mut h = self.embedding.forward(x)?.squeeze(0)?;
+        let mut h = self.embedding.forward(x)?;
 
         for (i, layer) in self.layers.iter().enumerate() {
             // Hybrid Logic:
@@ -367,7 +367,7 @@ impl Llama {
         let d_small = config.hidden_dim / 4;
         let mut w_states = Vec::new();
         for _ in 0..config.num_layers {
-            let w = Tensor::zeros((d_small, d_small), DType::F32, device)?;
+            let w = Tensor::zeros((1, d_small, d_small), DType::F32, device)?;
             w_states.push(w);
         }
 
@@ -438,7 +438,7 @@ impl Llama {
         let d_small = config.hidden_dim / 4;
         let mut w_states = Vec::new();
         for _ in 0..config.num_layers {
-            let w = Tensor::zeros((d_small, d_small), DType::F32, device)?;
+            let w = Tensor::zeros((1, d_small, d_small), DType::F32, device)?;
             w_states.push(w);
         }
 
@@ -603,7 +603,7 @@ impl Llama {
     pub fn reset_state(&mut self) -> anyhow::Result<()> {
         let d_small = self.model.config.hidden_dim / 4;
         for w in self.w_states.iter_mut() {
-            *w = Tensor::zeros((d_small, d_small), DType::F32, &self.device)?;
+            *w = Tensor::zeros((1, d_small, d_small), DType::F32, &self.device)?;
         }
         Ok(())
     }

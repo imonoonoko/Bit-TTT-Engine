@@ -43,6 +43,18 @@ pub struct ProjectState {
 
     // Async Control
     pub concat_cancel_flag: Arc<AtomicBool>,
+    pub task_type: TaskType,
+}
+
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum TaskType {
+    None,
+    Concatenation,
+    Tokenizer,
+    Preprocessing,
+    Training,
+    Inference,
+    Other,
 }
 
 // Shared State (for UI updates)
@@ -91,6 +103,7 @@ impl ProjectState {
             matched_file_count: None,
             fast_vocab: true, // Default to optimized training
             concat_cancel_flag: Arc::new(AtomicBool::new(false)),
+            task_type: TaskType::None,
         };
         state.check_files();
         state
@@ -124,6 +137,7 @@ impl ProjectState {
         while let Ok(msg) = self.log_rx.try_recv() {
             if msg == "<<PREPROCESS_DONE>>" || msg == "<<CONCAT_DONE>>" {
                 self.is_running = false;
+                self.task_type = TaskType::None;
                 self.status_message = "Ready".to_string();
                 self.check_files(); // Refresh file status
                 continue;
@@ -145,6 +159,7 @@ impl ProjectState {
             // Check for completion signal
             if msg.contains("<<PREPROCESS_DONE>>") || msg.contains("<<CONCAT_DONE>>") {
                 self.is_running = false;
+                self.task_type = TaskType::None;
                 self.status_message = "Ready".to_string();
                 self.check_files();
             }
@@ -205,8 +220,9 @@ impl ProjectState {
         self.logs.iter().cloned().collect::<Vec<_>>().join("\n")
     }
 
-    pub fn run_command(&mut self, cmd: &str, args: &[&str]) {
+    pub fn run_command(&mut self, cmd: &str, args: &[&str], task_type: TaskType) {
         self.is_running = true;
+        self.task_type = task_type;
         self.status_message = format!("Running {}...", cmd);
         self.log(&format!("$ {} {}", cmd, args.join(" ")));
 
@@ -269,6 +285,7 @@ impl ProjectState {
     pub fn concat_txt_files(&mut self) {
         self.log("Starting corpus concatenation (Async)...");
         self.is_running = true;
+        self.task_type = TaskType::Concatenation;
         self.status_message = "Concatenating files...".to_string();
 
         let raw_dir = self.path.join("raw");
