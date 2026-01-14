@@ -313,10 +313,15 @@ impl eframe::App for BitStudioApp {
 }
 
 pub fn run() -> Result<(), eframe::Error> {
-    let options = eframe::NativeOptions {
+    let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([1200.0, 800.0]),
         ..Default::default()
     };
+
+    // Load Icon
+    if let Ok(icon) = load_icon() {
+        options.viewport = options.viewport.with_icon(icon);
+    }
 
     eframe::run_native(
         "🚀 Bit-Llama Studio",
@@ -326,6 +331,21 @@ pub fn run() -> Result<(), eframe::Error> {
             Box::new(BitStudioApp::default())
         }),
     )
+}
+
+fn load_icon() -> anyhow::Result<egui::IconData> {
+    // Try bundling the icon first (Compile time)
+    // We use include_bytes! to embed it
+    let icon_bytes = include_bytes!("../../assets/icon.png");
+    let image = image::load_from_memory(icon_bytes)?;
+    let rgba = image.to_rgba8();
+    let (width, height) = rgba.dimensions();
+
+    Ok(egui::IconData {
+        rgba: rgba.into_raw(),
+        width,
+        height,
+    })
 }
 
 fn setup_custom_fonts(ctx: &egui::Context) {
