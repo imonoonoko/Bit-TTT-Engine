@@ -24,7 +24,7 @@ impl Default for ParamsScheduleFree {
 /// The model parameters 'p' track 'y' (interpolation) during training, and 'c' during eval.
 pub struct ScheduleFreeOptimizer {
     vars: Vec<Var>,
-    z: Vec<Tensor>, // Optimization sequence
+    pub z: Vec<Tensor>, // Optimization sequence
     step: usize,
     params: ParamsScheduleFree,
 }

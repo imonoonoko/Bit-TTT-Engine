@@ -29,5 +29,6 @@ use pyo3::prelude::*;
 fn cortex_rust(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<model::BitLlamaConfig>()?;
     m.add_class::<python::PyBitLlama>()?;
+    m.add_class::<python::PyTrainer>()?;
     Ok(())
 }
