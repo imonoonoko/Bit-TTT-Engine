@@ -452,7 +452,11 @@ pub fn run(args: TrainArgs) -> Result<()> {
             // Debug VRAM
             if let Ok((free, total)) = cortex_rust::device_utils::get_vram_info(0) {
                 let used_mb = (total - free) as f64 / 1024.0 / 1024.0;
-                info!("       [VRAM] Used: {:.2} MB / Total: {:.2} MB", used_mb, total as f64 / 1024.0 / 1024.0);
+                info!(
+                    "       [VRAM] Used: {:.2} MB / Total: {:.2} MB",
+                    used_mb,
+                    total as f64 / 1024.0 / 1024.0
+                );
             }
 
             if args.benchmark {
