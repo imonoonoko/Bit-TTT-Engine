@@ -263,6 +263,8 @@ pub struct Llama {
     pub w_states: Vec<Tensor>,
     /// Holds the shared lock on the model file to prevent modification during use
     pub _lock_file: Option<std::fs::File>,
+    /// Accumulated experience (Token Count) - "Soul Level"
+    pub soul_level: u64,
 }
 
 impl Llama {
@@ -377,6 +379,7 @@ impl Llama {
             device: device.clone(),
             w_states,
             _lock_file: lock_file_handle,
+            soul_level: 0,
         })
     }
 
@@ -448,6 +451,7 @@ impl Llama {
             device: device.clone(),
             w_states,
             _lock_file: lock_file_handle,
+            soul_level: 0,
         })
     }
 
@@ -476,6 +480,9 @@ impl Llama {
 
         let mut all_tokens = tokens.to_vec();
         let mut next_token = *all_tokens.last().unwrap();
+
+        // Count input tokens as experience
+        self.soul_level += tokens.len() as u64;
 
         for &t in tokens {
             let input = Tensor::new(&[t], &self.device)?;
@@ -509,6 +516,9 @@ impl Llama {
             let input = Tensor::new(&[next_token], &self.device)?;
             let logits = self.model.forward_one(&input, &mut self.w_states)?;
             let logits_v = logits.squeeze(0)?;
+
+            // Experience +1 per generated token
+            self.soul_level += 1;
 
             let prs = candle_nn::ops::softmax(&(&logits_v / temperature)?, 0)?;
             let prs_vec = prs.to_vec1::<f32>()?;
@@ -568,6 +578,33 @@ impl Llama {
         result
     }
 
+    /// Learn from text without generating (Sleep Mode)
+    /// Updates w_states and increments soul_level
+    pub fn learn(&mut self, text: &str) -> anyhow::Result<usize> {
+        let encoding = self
+            .tokenizer
+            .encode(text, true)
+            .map_err(|e| anyhow::anyhow!(e))?;
+        let tokens = encoding.get_ids();
+
+        if tokens.is_empty() {
+            return Ok(0);
+        }
+
+        // Prepare input tensor [1, seq_len]
+        let input = Tensor::new(tokens, &self.device)?.unsqueeze(0)?;
+
+        // We discard logits as we are only interested in side-effect (state update)
+        let _ = self
+            .model
+            .forward_chunkwise(&input, &mut self.w_states, 64)?;
+
+        let count = tokens.len();
+        self.soul_level += count as u64;
+
+        Ok(count)
+    }
+
     pub fn export_to_bitt<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
         let path = path.as_ref();
         use std::io::Write;
@@ -605,6 +642,7 @@ impl Llama {
         for w in self.w_states.iter_mut() {
             *w = Tensor::zeros((1, d_small, d_small), DType::F32, &self.device)?;
         }
+        self.soul_level = 0; // Reset soul level
         Ok(())
     }
 
@@ -619,12 +657,18 @@ impl Llama {
             tensors.insert(format!("w_state.{}", i), w.clone());
         }
 
-        // 2. Save Metadata as a dummy tensor (Dimensions check is usually enough, but this adds safety)
-        // Storing hidden_dim and num_layers as a small tensor [hidden_dim, num_layers]
+        // 2. Save Metadata as a dummy tensor
+        // [hidden_dim, num_layers, soul_level_high, soul_level_low]
+        // Since safetensors only supports tensors, we encode u64 soul_level into two u32.
+        let soul_high = (self.soul_level >> 32) as u32;
+        let soul_low = (self.soul_level & 0xFFFFFFFF) as u32;
+
         let meta = Tensor::new(
             &[
                 self.model.config.hidden_dim as u32,
                 self.model.config.num_layers as u32,
+                soul_high,
+                soul_low,
             ],
             &self.device,
         )?;
@@ -640,7 +684,7 @@ impl Llama {
         let path = path.as_ref();
         let tensors = candle_core::safetensors::load(path, &self.device)?;
 
-        // 1. Validate Compatibility
+        // 1. Validate Compatibility & Load Soul Level
         if let Some(meta) = tensors.get("meta_config") {
             let meta_vec = meta.to_vec1::<u32>()?;
             if meta_vec.len() >= 2 {
@@ -661,10 +705,21 @@ impl Llama {
                         self.model.config.num_layers
                     );
                 }
+
+                // Load Soul Level if available (v0.5.0+)
+                if meta_vec.len() >= 4 {
+                    let soul_high = meta_vec[2] as u64;
+                    let soul_low = meta_vec[3] as u64;
+                    self.soul_level = (soul_high << 32) | soul_low;
+                } else {
+                    // Legacy (v0.4.0) has no soul level
+                    self.soul_level = 0;
+                }
             }
         } else {
             // If no meta_config, we fall back to shape checking, but warn.
             println!("[Warn] Loading legacy memory file (no meta_config found).");
+            self.soul_level = 0;
         }
 
         // 2. Load w_states

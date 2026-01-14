@@ -1,6 +1,6 @@
 [package]
 name = "bit_llama"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 [dependencies]
@@ -50,7 +50,7 @@ path = "src/main.rs"
 
 [features]
 default = []
-cuda = ["candle-core/cuda", "candle-nn/cuda", "dep:nvml-wrapper"]
+cuda = ["candle-core/cuda", "candle-nn/cuda", "dep:nvml-wrapper", "cortex_rust/cuda"]
 
 [dev-dependencies]
 tempfile = "3.8"

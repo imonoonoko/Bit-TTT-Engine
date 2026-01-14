@@ -25,6 +25,7 @@ pub enum AppTab {
     Preprocessing,
     Training,
     Inference,
+    ModelLab,
     Settings,
 }
 
@@ -51,6 +52,12 @@ pub struct BitStudioApp {
     pub inference_session: InferenceSession,
     pub chat_history: Vec<ChatMessage>,
     pub chat_input: String,
+    pub soul_level: u64,
+
+    // Autosave State
+    pub current_soul_path: Option<std::path::PathBuf>,
+    pub autosave_enabled: bool,
+    pub is_dreaming: bool,
 
     // Project Selection
     pub available_projects: Vec<String>,
@@ -83,6 +90,10 @@ impl Default for BitStudioApp {
             inference_session: InferenceSession::new(),
             chat_history: Vec::new(),
             chat_input: String::new(),
+            soul_level: 0,
+            current_soul_path: None,
+            autosave_enabled: true, // Default to true for "Life Awareness"
+            is_dreaming: false,
         }
     }
 }
@@ -149,6 +160,103 @@ impl BitStudioApp {
         // Reset tab to DataPrep when loading? Or keep current?
         self.tab = AppTab::DataPrep;
     }
+
+    fn poll_inference_events(&mut self) {
+        use crate::gui::inference_session::InferenceEvent;
+        let session = &mut self.inference_session;
+        while let Ok(event) = session.event_rx.try_recv() {
+            match event {
+                InferenceEvent::Output(text) => {
+                    // Mirror to Console Logs panel
+                    if let Some(proj) = &mut self.current_project {
+                        let cleaned = text.trim();
+                        if !cleaned.is_empty() {
+                            proj.log(cleaned);
+                        }
+                    }
+
+                    // Detect Sleep State Transitions
+                    if text.contains("Entering Sleep Mode") {
+                        session.is_dreaming = true;
+                    }
+                    if text.contains("Sleep finished")
+                        || text.contains("Waking up")
+                        || text.contains("Dream interrupted")
+                        || text.contains("Nightmare")
+                    {
+                        session.is_dreaming = false;
+                    }
+
+                    // Filter: only add actual AI responses to chat history
+                    let is_system_log = text.contains("Portable Mode")
+                        || text.contains("CWD set to")
+                        || text.contains("bit_llama:")
+                        || text.contains("INFO")
+                        || text.contains("WARN")
+                        || text.contains("Bit-Llama Inference")
+                        || text.contains("Loading model from")
+                        || text.contains("[Auto-Config]")
+                        || text.contains("Model Loaded")
+                        || text.contains("Memory loaded from")
+                        || text.contains("Memory saved to")
+                        || text.contains("Soul Level:")
+                        || text.contains("Entering Sleep Mode")
+                        || text.contains("Sleep finished")
+                        || text.contains("Waking up")
+                        || text.contains("[Generating...]")
+                        || text.starts_with("---")
+                        || text.starts_with(">")
+                        || text.starts_with("📍")
+                        || text.starts_with("✅")
+                        || text.starts_with("📂")
+                        || text.starts_with("💾")
+                        || text.starts_with("🌟")
+                        || text.starts_with("🔄")
+                        || text.starts_with("🌡️")
+                        || text.starts_with("📏")
+                        || text.trim().is_empty()
+                        || text.trim() == ".";
+
+                    if !is_system_log {
+                        if let Some(last) = self.chat_history.last_mut() {
+                            if last.role == "Assistant" {
+                                last.content.push_str(&text);
+                            } else {
+                                self.chat_history.push(ChatMessage {
+                                    role: "Assistant".to_string(),
+                                    content: text,
+                                });
+                            }
+                        } else {
+                            self.chat_history.push(ChatMessage {
+                                role: "Assistant".to_string(),
+                                content: text,
+                            });
+                        }
+                    }
+                }
+                InferenceEvent::Ready => {}
+                InferenceEvent::Error(err) => {
+                    self.chat_history.push(ChatMessage {
+                        role: "System".to_string(),
+                        content: format!("Error: {}", err),
+                    });
+                    session.is_dreaming = false;
+                }
+                InferenceEvent::Exit => {
+                    self.chat_history.push(ChatMessage {
+                        role: "System".to_string(),
+                        content: "Process Exited.".to_string(),
+                    });
+                    session.active_process = None;
+                    session.is_dreaming = false;
+                }
+                InferenceEvent::SoulLevel(lvl) => {
+                    self.soul_level = lvl;
+                }
+            }
+        }
+    }
 }
 
 impl eframe::App for BitStudioApp {
@@ -178,14 +286,8 @@ impl eframe::App for BitStudioApp {
             }
         }
 
-        // Poll Inference Events (Generic, handled in tabs::inference::render mainly, but we can drain here if needed?)
-        // Actually, we should pass &mut app to render, and let render drain events.
-        // But render is called later.
-        // We can leave event polling to tabs/inference.rs render function.
-        // Or drain here and store in session struct?
-        // Session struct holds Rx. We need to drain to Tx?
-        // Ah, InferenceSession holds Rx.
-        // So we can drain it in `tabs::inference::render`.
+        // Poll Inference Events (CENTRAL)
+        self.poll_inference_events();
 
         // Left Panel (Project Management)
         egui::SidePanel::left("project_panel")
@@ -298,7 +400,8 @@ impl eframe::App for BitStudioApp {
                     ui.selectable_value(&mut self.tab, AppTab::DataPrep, "1. Data Prep");
                     ui.selectable_value(&mut self.tab, AppTab::Preprocessing, "2. Preprocessing");
                     ui.selectable_value(&mut self.tab, AppTab::Training, "3. Training");
-                    ui.selectable_value(&mut self.tab, AppTab::Inference, "4. Chat (Test)");
+                    ui.selectable_value(&mut self.tab, AppTab::Inference, "4. Chat");
+                    ui.selectable_value(&mut self.tab, AppTab::ModelLab, "5. Model Lab");
                     ui.selectable_value(&mut self.tab, AppTab::Settings, "⚙ Settings");
                 });
                 ui.add_space(5.0);

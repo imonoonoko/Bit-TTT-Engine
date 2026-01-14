@@ -265,9 +265,12 @@ impl ProjectState {
 
     pub fn request_stop(&mut self) {
         self.log("🛑 Requesting graceful stop...");
-        if let Ok(mut file) = fs::File::create("stop_signal") {
+
+        let stop_path = Self::get_stop_signal_path();
+
+        if let Ok(mut file) = fs::File::create(&stop_path) {
             let _ = file.write_all(b"stop");
-            self.log("Signal sent. Waiting for model save...");
+            self.log(&format!("Signal sent to: {:?}", stop_path));
         } else {
             self.log("Failed to create stop signal file!");
         }
@@ -279,7 +282,20 @@ impl ProjectState {
             self.log("Process killed by user (Force).");
         }
         self.is_running = false;
-        let _ = fs::remove_file("stop_signal");
+
+        let stop_path = Self::get_stop_signal_path();
+        let _ = fs::remove_file(&stop_path);
+    }
+
+    /// Helper to get consistent absolute path for stop_signal
+    fn get_stop_signal_path() -> PathBuf {
+        if let Ok(exe) = std::env::current_exe() {
+            exe.parent()
+                .map(|p| p.join("stop_signal"))
+                .unwrap_or_else(|| PathBuf::from("stop_signal"))
+        } else {
+            PathBuf::from("stop_signal")
+        }
     }
 
     pub fn concat_txt_files(&mut self) {

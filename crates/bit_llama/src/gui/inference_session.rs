@@ -8,12 +8,14 @@ pub enum InferenceEvent {
     Ready,
     Error(String),
     Exit,
+    SoulLevel(u64),
 }
 
 pub struct InferenceSession {
     pub active_process: Option<Child>,
     pub input_tx: Option<Sender<String>>,
     pub event_rx: Receiver<InferenceEvent>,
+    pub is_dreaming: bool,
 }
 
 impl InferenceSession {
@@ -23,6 +25,7 @@ impl InferenceSession {
             active_process: None,
             input_tx: None,
             event_rx: rx,
+            is_dreaming: false,
         }
     }
 
@@ -45,12 +48,6 @@ impl InferenceSession {
             .stdin(Stdio::piped())
             .stderr(Stdio::piped());
 
-        // Windows: Hide console is managed by main.rs attribute?
-        // If release build, it has no console. Pipes work.
-        // If debug build, console might appear or not depending on config.
-        // We want hidden. But current_exe inherits?
-        // If parent is GUI (hidden), child is typically hidden if piped.
-
         let mut child = command.spawn()?;
 
         // Channels
@@ -66,6 +63,9 @@ impl InferenceSession {
                 if writeln!(stdin, "{}", msg).is_err() {
                     break;
                 }
+                if stdin.flush().is_err() {
+                    break;
+                }
             }
         });
 
@@ -74,6 +74,9 @@ impl InferenceSession {
         let ev_tx_out = event_tx.clone();
         thread::spawn(move || {
             let mut buffer = [0u8; 1024];
+            let re_ansi = regex::Regex::new(r"\x1B\[([0-9]{1,2}(;[0-9]{1,2})*)?m").unwrap();
+            let re_soul = regex::Regex::new(r"Soul Level: (\d+)").unwrap();
+
             loop {
                 match stdout.read(&mut buffer) {
                     Ok(0) => {
@@ -82,34 +85,35 @@ impl InferenceSession {
                     }
                     Ok(n) => {
                         let chunk = &buffer[0..n];
-                        // Converting chunk to string.
-                        // Note: If a multibyte char is split, this is an issue.
-                        // Ideally we buffer incomplete bytes.
-                        // For MVP, we rely on token-based flushing from sender.
+                        // Using lossy conversion to avoid panics on partial UTF-8 bytes at boundary
+                        // Ideally we'd buffer, but for now this is robust enough for logs
                         let s = String::from_utf8_lossy(chunk);
 
                         // 1. Strip ANSI codes
-                        let s_no_ansi = regex::Regex::new(r"\x1B\[([0-9]{1,2}(;[0-9]{1,2})*)?m")
-                            .unwrap()
-                            .replace_all(&s, "");
+                        let s_no_ansi = re_ansi.replace_all(&s, "");
 
-                        // 2. Filter Garbage (Control Chars & Replacement Chars)
+                        // 2. Parse Soul Level
+                        if let Some(caps) = re_soul.captures(&s_no_ansi) {
+                            if let Some(m) = caps.get(1) {
+                                if let Ok(lvl) = m.as_str().parse::<u64>() {
+                                    let _ = ev_tx_out.send(InferenceEvent::SoulLevel(lvl));
+                                }
+                            }
+                        }
+
+                        // 3. Filter Garbage
                         let s_clean: String = s_no_ansi
                             .chars()
                             .filter(|c| {
-                                // Keep newlines and tabs
                                 if *c == '\n' || *c == '\r' || *c == '\t' {
                                     return true;
                                 }
-                                // Remove other control chars (0x00-0x1F, 0x7F)
                                 if c.is_control() {
                                     return false;
                                 }
-                                // Remove Replacement Character (invalid UTF-8 result)
                                 if *c == '\u{FFFD}' {
                                     return false;
                                 }
-                                // Keep everything else
                                 true
                             })
                             .collect();
@@ -126,16 +130,39 @@ impl InferenceSession {
             }
         });
 
-        // Stderr Thread (Control Signals)
+        // Stderr Thread (Control Signals & Error Catching)
         let stderr = child.stderr.take().unwrap();
         let ev_tx_err = event_tx.clone();
         thread::spawn(move || {
             let reader = BufReader::new(stderr);
-            for l in reader.lines().map_while(Result::ok) {
-                if l.trim() == "<<READY>>" {
-                    let _ = ev_tx_err.send(InferenceEvent::Ready);
-                } else if !l.trim().is_empty() {
-                    // Optional: Forward other logs as errors or ignored
+            for l in reader.lines() {
+                if let Ok(line) = l {
+                    let trimmed = line.trim();
+                    if trimmed == "<<READY>>" {
+                        let _ = ev_tx_err.send(InferenceEvent::Ready);
+                    } else if !trimmed.is_empty() {
+                        // Distinguish real errors from informational STDERR (tracing, debug logs)
+                        let lower = trimmed.to_lowercase();
+                        let is_real_error = lower.contains("error")
+                            || lower.contains("panic")
+                            || lower.contains("failed")
+                            || lower.contains("fatal")
+                            || lower.contains("abort");
+
+                        // Skip certain noisy but harmless messages
+                        let is_info_noise = lower.contains("portable mode")
+                            || lower.contains("cwd set to")
+                            || trimmed.starts_with("📍");
+
+                        if is_real_error && !is_info_noise {
+                            let _ = ev_tx_err.send(InferenceEvent::Error(line));
+                        } else {
+                            // Just show as normal output (will appear without scary "Error:" prefix)
+                            let _ = ev_tx_err.send(InferenceEvent::Output(format!("{}\n", line)));
+                        }
+                    }
+                } else {
+                    break;
                 }
             }
         });

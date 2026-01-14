@@ -6,6 +6,7 @@ pub mod export;
 pub mod gui;
 pub mod inference;
 pub mod loader;
+pub mod memory;
 pub mod state;
 pub mod train;
 pub mod vocab;

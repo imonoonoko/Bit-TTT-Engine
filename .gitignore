@@ -48,3 +48,9 @@ dummy_*.u32
 build_log.txt
 clippy*.log
 train_debug*.log
+
+# Distribution
+dist/
+*.zip
+*.7z
+*.rar

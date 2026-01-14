@@ -34,6 +34,7 @@ pub fn render_workspace(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                 }
             }
             AppTab::Inference => super::tabs::inference::render(app, ui),
+            AppTab::ModelLab => super::tabs::model_lab::render(app, ui),
             AppTab::Settings => {
                 if let Some(project) = app.current_project.as_mut() {
                     tabs::settings::show(ui, project, lang, &mut app.current_preset, |new_tab| {

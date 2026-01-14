@@ -29,7 +29,7 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 
 1. **Install**
    ```bash
-   pip install dist/python/cortex_rust-0.1.0-cp310-cp310-win_amd64.whl
+   pip install dist/python/cortex_rust-0.3.0-cp310-cp310-win_amd64.whl
    ```
 
 2. **Run Hello World**
