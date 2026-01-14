@@ -16,7 +16,7 @@ use crate::gui::inference_session::InferenceSession;
 use crate::gui::presets::ModelPreset;
 use crate::state::ProjectState;
 
-const PROJECTS_DIR: &str = "projects";
+const PROJECTS_DIR: &str = "workspace/projects";
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum AppTab {

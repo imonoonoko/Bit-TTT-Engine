@@ -80,7 +80,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
     } else if let Some(parent) = data_path_obj.parent() {
         parent.join("tokenizer.json")
     } else {
-        Path::new("data/TinyStories/tokenizer.json").to_path_buf()
+        Path::new("workspace/data/TinyStories/tokenizer.json").to_path_buf()
     };
 
     info!("Loading Tokenizer from: {:?}", tokenizer_path);
@@ -261,7 +261,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
         } else if let Some(parent) = data_path_obj.parent() {
             parent.join("tokenizer.json")
         } else {
-            Path::new("data/TinyStories/tokenizer.json").to_path_buf()
+            Path::new("workspace/data/TinyStories/tokenizer.json").to_path_buf()
         };
 
         let tokenizer_dest = format!("{}tokenizer.json", effective_output_dir);
@@ -275,7 +275,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
                 info!("✅ Tokenizer backed up to: {}", tokenizer_dest);
             }
         } else {
-            let default_tok = Path::new("data/TinyStories/tokenizer.json");
+            let default_tok = Path::new("workspace/data/TinyStories/tokenizer.json");
             if default_tok.exists() && default_tok != tokenizer_source {
                 if std::fs::copy(default_tok, &tokenizer_dest).is_ok() {
                     info!(

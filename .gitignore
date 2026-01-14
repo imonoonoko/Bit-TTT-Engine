@@ -7,11 +7,15 @@ target/
 stop_signal
 
 # Project Specific
-pre_demon_test/
-projects/
-/data/
-legacy/
-release_dist/
+# User Workspace (Refactor V2)
+workspace/
+!workspace/**/.keep
+
+# Old (Kept for safety or removed locally)
+# projects/
+# /data/
+# legacy/
+# release_dist/
 
 # Checkpoints and Models
 *.safetensors

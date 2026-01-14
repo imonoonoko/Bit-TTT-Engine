@@ -1,129 +1,85 @@
-# Bit-TTT Engine 開発者ガイド
+# Bit-TTT Engine 開発者ガイド (Refactor V2)
 
-このドキュメントでは、**Bit-TTT Engine** のディレクトリ構造、主要ファイルの役割、および開発フローについて解説します。
-新規開発者やコントリビューターがプロジェクトの全体像を把握するための羅針盤として利用してください。
+**Bit-TTT Engine** は、リファクタリング (V2) により、ソースコード・ユーザーデータ・ビルド生成物が明確に分離されたディレクトリ構造を採用しています。
 
 ---
 
 ## 📂 ディレクトリ構造概観
 
 ```text
-Bit-TTT Engine
-├── crates/                  # Rust ソースコード (ワークスペース)
-│   ├── rust_engine/         # [Core] コアライブラリ (モデル定義, 計算カーネル, Python統合)
-│   └── bit_llama/           # [App] アプリケーション (CLI, GUI, 学習/推論ランナー)
+Bit-TTT/
+├── crates/             # 🦀 ソースコード (Rust Workspace)
+│   ├── rust_engine/    # [Core] 計算カーネル, PyO3バインディング
+│   └── bit_llama/      # [App]  CLI, GUI, 学習ロジック
 │
-├── tools/                   # 開発者用ツール (PowerShell スクリプト)
-├── docs/                    # ドキュメント
-│   ├── images/              # 画像リソース
-│   └── archive/             # 過去のフェーズの記録 (旧仕様・計画書)
+├── workspace/          # 👤 ユーザー領域 (Git除外)
+│   ├── projects/       # GUIプロジェクトデータ
+│   ├── models/         # ダウンロード/学習済みモデル
+│   ├── logs/           # 実行ログ
+│   └── data/           # 学習用データセット (Wiki40b等)
 │
-├── data/                    # 学習データ・設定ファイル配置場所
-│   └── sample_config/       # デフォルト設定ファイル (config.json 等)
+├── assets/             # 🎨 静的リソース
+│   ├── defaults/       # デフォルト設定 (config.json)
+│   └── presets/        # プリセットデータ
 │
-├── models/                  # (Git除外) 学習済みモデル出力先
-├── logs/                    # (Git除外) 実行ログ出力先
-└── target/                  # (Git除外) Rust ビルド成果物
+├── dist/               # 📦 配布用アーティファクト
+│   ├── binaries/       # コンパイル済み実行ファイル (.exe, .dll)
+│   └── archives/       # 配布用パッケージ (.zip)
+│
+├── tools/              # 🛠️ 開発・運用スクリプト
+│   ├── benchmarks/     # パフォーマンス測定
+│   └── utils/          # ユーティリティ
+│
+└── docs/               # 📚 ドキュメント
+    ├── archive/        # 過去ログ
+    └── ...
 ```
 
 ---
 
-## 📦 `crates/rust_engine` (Core Library)
+## 🚀 クイックスタート (開発者向け)
 
-ニューラルネットワークの定義、計算ロジック、Pythonバインディングを提供するコアライブラリです。`cortex_rust` というクレート名で公開されます。
+### 1. ビルドと実行
+```bash
+# GUIの起動
+cargo run --release --bin bit_llama -- gui
 
-| パス | 役割 | 詳細 |
-|---|---|---|
-| `src/lib.rs` | エントリポイント | モジュール公開定義。PyO3のモジュール登録処理。 |
-| `src/python.rs` | **Python統合** | `PyTrainer`, `BitLlama` クラスのPyO3実装。Pythonから呼び出すAPIを定義。 |
-| `src/model/` | モデル定義 | |
-| ├── `llama.rs` | `BitLlama` | Llamaアーキテクチャのメイン構造体。`forward` ロジック。 |
-| ├── `block.rs` | Transformer Block | Attention と MLP を組み合わせたブロック定義。 |
-| └── `config.rs` | 設定 | モデルのハイパーパラメータ (`BitLlamaConfig`). `Copy`トレイト実装。 |
-| `src/layers/` | レイヤー実装 | |
-| ├── `bit_linear.rs` | **BitLinear** | 1.58-bit 量子化線形層。重みは {-1, 0, 1}。 |
-| ├── `ttt.rs` | **TTT Layer** | Test-Time Training レイヤー。勾配更新による短期記憶。 |
-| └── `rms_norm.rs` | RMSNorm | 正規化層。 |
-| `src/kernels/` | 計算カーネル | |
-| ├── `cpu.rs` | AVX2カーネル | CPU向けの高速行列演算 (SIMD)。 |
-| └── `cuda/` | CUDAカーネル | GPU向けの高速計算ロジック (PTX)。 |
+# CLIでの学習
+cargo run --release --bin train_llama -- --data workspace/data/TinyStories
+```
 
----
-
-## 🛠️ `crates/bit_llama` (Application)
-
-ユーザーが直接実行する実行バイナリ (`bit_llama`, `train_llama` 等) を提供するアプリケーションクレートです。
-
-| パス | 役割 | 詳細 |
-|---|---|---|
-| `src/bin/` | 実行エントリ | |
-| ├── `bit_llama.rs` | 推論CLI | `cargo run --bin bit_llama` のエントリポイント。 |
-| └── `train_llama.rs` | 学習CLI | `cargo run --bin train_llama` のエントリポイント。 |
-| `src/gui/` | **GUI (Tauri)** | トレーニング画面のUIロジック (HTML/JS/Rust)。 |
-| `src/train/` | 学習ロジック | |
-| ├── `training_loop.rs`| **学習ループ** | 再開機能付きのメイン学習ループ。チェックポイント保存。 |
-| └── `checkpoint.rs` | 状態管理 | 重みとオプティマイザ状態のシリアライズ管理。 |
-| `src/inference.rs` | 推論エンジン | ストリーミングトークン生成の管理。`InferenceSession`。 |
-| `src/vocab.rs` | トークナイザ | SentencePiece (Unigram) および BPE の実装。 |
-| `src/loader.rs` | データローダ | `memmap2` を使用した高速データセット読み込み。 |
-| `src/monitor.rs` | リソース監視 | VRAM/RAM 使用率のモニタリング (NVML統合)。 |
-
----
-
-## 🔧 `tools/` (Utility Scripts)
-
-開発や運用を補助するスクリプト群です。
-
-| ファイル/フォルダ | 用途 |
-|---|---|
-| `BitLlama-Train.ps1` | `train_llama` を適切な引数で起動するラッパー。 |
-| `BitLlama-Chat.ps1` | `bit_llama` (推論) を起動するラッパー。 |
-| `BitLlama-GUI.ps1` | GUI版トレーナーを起動する。 |
-| `pre_demon.py` | **Demon Audit** | コードベースの健全性チェック。 |
-| `pre_commit_check.py` | Git Hook用。コミット前の大容量ファイルチェック。 |
-| `benchmarks/` | パフォーマンス測定用スクリプト (PyTorch比較など)。 |
-| `utils/` | その他ユーティリティ。 |
-
----
-
-## 📂 その他の重要ディレクトリ
-
-| ディレクトリ | 説明 |
-|---|---|
-| `examples/` | Python推論の実装例 (`python_inference.py`) など。 |
-| `projects/` | GUIトレーナーで使用するプロジェクト保存先 (ユーザーデータ)。 |
-| `release/` | ビルド済みバイナリや配布用アーティファクトの格納先。 |
-
----
-
-## 📚 `docs/` (Documentation)
-
-| ファイル/保存先 | 内容 |
-|---|---|
-| `specifications.md` | **技術仕様書**。アルゴリズムやデータ構造の詳細。 |
-| `ROADMAP.md` | **ロードマップ**。開発計画と進捗状況。 |
-| `archive/` | **過去ログ**。終了したフェーズの計画書や一時的なメモ。 |
-| `DEVELOPER_GUIDE_JA.md` | **本ドキュメント**。開発者向けガイド。 |
-
----
-
-## 🔄 開発ワークフロー
-
-### Rustコードの修正
-1. `crates/` 以下のコードを修正。
-2. `cargo check --workspace` でコンパイル確認。
-3. `cargo fmt --all` でフォーマット。
-4. (`crates/rust_engine` 修正時) `python crates/rust_engine/examples/python_sanity_check.py` でバインディング確認。
-
-### Pythonバインディングのビルド
+### 2. Pythonバインディング
 ```bash
 cd crates/rust_engine
 maturin develop --release
 ```
 
-### コミット前確認
+---
+
+## 🧩 主要コンポーネント詳細
+
+### `workspace/` (ユーザー領域)
+実行時に生成されるファイルや、ユーザーが用意するデータセットは全てここに配置します。
+- **Git管理対象外** です (ただし `.keep` ファイルによりフォルダ構造のみ維持)。
+- **Projects**: GUIで作成したプロジェクトは `workspace/projects/<name>/` に保存され、その中に `models/`, `logs/` が個別に生成されます。
+
+### `assets/` (静的アセット)
+- プロジェクト自体のリポジトリに含まれるべき設定ファイルやデフォルトデータです。
+- `configs/`: モデルのハイパーパラメータテンプレートなど。
+
+### `crates/` (ソースコード)
+- **rust_engine**: エンジンの心臓部。BitNet b1.58 の行列演算ロジック (`kernels/`)、Llama構造定義 (`model/`)、Python連携 (`python.rs`) を担当。
+- **bit_llama**: アプリケーション層。TauriベースのGUI (`gui/`)、学習ループ制御 (`train/`)、CLI引数処理 (`cli.rs`) を担当。
+
+---
+
+## 🛠️ ツール (tools/)
+PowerShellスクリプトで開発を支援します。
+- `BitLlama-Train.ps1`: `train_llama` のラッパー。
+- `BitLlama-GUI.ps1`: GUI起動ラッパー。
+
+## 🧪 テスト
 ```bash
-# 全体テスト & リンター
+python crates/rust_engine/examples/python_sanity_check.py
 cargo test --workspace
-cargo clippy --workspace
 ```
