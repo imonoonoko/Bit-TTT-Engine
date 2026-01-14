@@ -192,7 +192,7 @@ pub fn run(args: PreprocessArgs) -> Result<()> {
                 }
 
                 let text_to_process = if has_template {
-                    if let Ok(_) = serde_json::from_str::<Value>(&line) {
+                    if serde_json::from_str::<Value>(&line).is_ok() {
                         // Render Template (Early render check not needed if we re-parse in process_chunk,
                         // but currently process_chunk re-parses.
                         // To avoid double parsing inefficiency we *could* pass Value,
@@ -287,17 +287,15 @@ fn process_chunk(
                 // Try Parse as JSON
                 if let Ok(json_ctx) = serde_json::from_str::<Value>(text) {
                     // Render Template
-                    match env
-                        .get_template("main")
-                        .and_then(|t| t.render(&json_ctx).map_err(|e| minijinja::Error::from(e)))
-                    {
-                        Ok(rendered) => rendered,
-                        Err(_) => {
-                            // Template or Template-lookup error: skip (empty) or raw?
-                            // User wants fault tolerance: skipping is safer than garbage.
-                            String::new()
-                        }
-                    }
+                    // Try Render (skip on error)
+                    env.get_template("main")
+                        .and_then(|t| {
+                            t.render(&json_ctx).map_err(|e| {
+                                #[allow(clippy::useless_conversion)]
+                                minijinja::Error::from(e)
+                            })
+                        })
+                        .unwrap_or_default()
                 } else {
                     // Not valid JSON: skip or raw?
                     // If template is forced, and it's not JSON, it's noise.

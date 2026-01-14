@@ -58,8 +58,8 @@ pub fn run(args: InferenceArgs) -> Result<()> {
             continue;
         }
 
-        if prompt.starts_with("/temp ") {
-            if let Ok(v) = prompt["/temp ".len()..].parse::<f64>() {
+        if let Some(stripped) = prompt.strip_prefix("/temp ") {
+            if let Ok(v) = stripped.parse::<f64>() {
                 current_temp = v;
                 println!("🌡️ Temperature set to {:.2}", current_temp);
             } else {
@@ -68,8 +68,8 @@ pub fn run(args: InferenceArgs) -> Result<()> {
             continue;
         }
 
-        if prompt.starts_with("/len ") {
-            if let Ok(v) = prompt["/len ".len()..].parse::<usize>() {
+        if let Some(stripped) = prompt.strip_prefix("/len ") {
+            if let Ok(v) = stripped.parse::<usize>() {
                 current_max_tokens = v;
                 println!("📏 Max length set to {}", current_max_tokens);
             } else {

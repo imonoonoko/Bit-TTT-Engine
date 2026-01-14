@@ -220,7 +220,7 @@ impl eframe::App for BitStudioApp {
                         let is_selected = self
                             .current_project
                             .as_ref()
-                            .map_or(false, |p| p.config.name == *proj);
+                            .is_some_and(|p| p.config.name == *proj);
                         if ui
                             .selectable_label(is_selected, format!("📄 {}", proj))
                             .clicked()
@@ -232,12 +232,10 @@ impl eframe::App for BitStudioApp {
 
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
                     ui.add_space(10.0);
-                    if self.current_project.is_some() {
-                        if ui.button("❌ Close Project").clicked() {
-                            self.current_project = None;
-                            self.tab = AppTab::Home;
-                            self.available_projects = Self::scan_projects();
-                        }
+                    if self.current_project.is_some() && ui.button("❌ Close Project").clicked() {
+                        self.current_project = None;
+                        self.tab = AppTab::Home;
+                        self.available_projects = Self::scan_projects();
                     }
                     ui.separator();
                 });

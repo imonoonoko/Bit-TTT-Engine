@@ -138,7 +138,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
 
     let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
-    let model = BitLlama::load(config.clone(), vb)?;
+    let model = BitLlama::load(config, vb)?;
 
     let base_dir = if Path::new("bit_llama_checkpoint.safetensors").exists() {
         "".to_string()
@@ -316,7 +316,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
         } else {
             let progress = (step - args.warmup_steps) as f64
                 / (args.steps.saturating_sub(args.warmup_steps)) as f64;
-            let progress = progress.min(1.0).max(0.0);
+            let progress = progress.clamp(0.0, 1.0);
             let cosine = (progress * std::f64::consts::PI).cos();
             let decay = 0.5 * (1.0 + cosine);
             args.min_lr + (args.lr - args.min_lr) * decay

@@ -84,7 +84,7 @@ pub fn render(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                 }
                 ui.label(egui::RichText::new("🟢 Active").color(egui::Color32::GREEN));
             } else {
-                let is_training = app.current_project.as_ref().map_or(false, |p| p.is_running);
+                let is_training = app.current_project.as_ref().is_some_and(|p| p.is_running);
                 ui.add_enabled_ui(!is_training, |ui| {
                     if ui.button("▶ Load Model").clicked() {
                         if let Some(proj) = &app.current_project {

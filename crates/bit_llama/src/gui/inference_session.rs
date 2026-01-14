@@ -26,6 +26,7 @@ impl InferenceSession {
         }
     }
 
+
     pub fn is_active(&self) -> bool {
         self.active_process.is_some()
     }
@@ -63,7 +64,7 @@ impl InferenceSession {
         let mut stdin = child.stdin.take().unwrap();
         thread::spawn(move || {
             while let Ok(msg) = in_rx.recv() {
-                if let Err(_) = writeln!(stdin, "{}", msg) {
+                if writeln!(stdin, "{}", msg).is_err() {
                     break;
                 }
             }
@@ -102,13 +103,11 @@ impl InferenceSession {
         let ev_tx_err = event_tx.clone();
         thread::spawn(move || {
             let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                if let Ok(l) = line {
-                    if l.trim() == "<<READY>>" {
-                        let _ = ev_tx_err.send(InferenceEvent::Ready);
-                    } else if !l.trim().is_empty() {
-                        // Optional: Forward other logs as errors or ignored
-                    }
+            for l in reader.lines().map_while(Result::ok) {
+                if l.trim() == "<<READY>>" {
+                    let _ = ev_tx_err.send(InferenceEvent::Ready);
+                } else if !l.trim().is_empty() {
+                    // Optional: Forward other logs as errors or ignored
                 }
             }
         });
@@ -128,5 +127,11 @@ impl InferenceSession {
             let _ = child.kill();
         }
         self.input_tx = None;
+    }
+}
+
+impl Default for InferenceSession {
+    fn default() -> Self {
+        Self::new()
     }
 }

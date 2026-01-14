@@ -19,7 +19,7 @@ impl BitLoader {
         let file = File::open(path)?;
         let mmap = unsafe { Mmap::map(&file)? };
 
-        let is_u32 = path.extension().map_or(false, |ext| {
+        let is_u32 = path.extension().is_some_and(|ext| {
             ext == "u32" || path.to_string_lossy().ends_with(".u32.bin")
         });
 

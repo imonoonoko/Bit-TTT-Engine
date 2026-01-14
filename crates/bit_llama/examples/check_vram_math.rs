@@ -7,10 +7,12 @@ fn main() {
     println!("=== Bit-TTT VRAM Estimation Verification ===\n");
 
     // Case 1: Consumer Default (Small)
-    let mut config = ProjectConfig::default();
-    config.model_dim = 512;
-    config.layers = 8;
-    config.context_len = 512;
+    let mut config = ProjectConfig {
+        model_dim: 512,
+        layers: 8,
+        context_len: 512,
+        ..Default::default()
+    };
     print_metrics("Consumer Default (Dim=512, L=8)", &config);
 
     // Case 2: Llama-7B Equivalence (Approx)
