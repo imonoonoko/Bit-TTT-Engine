@@ -26,7 +26,6 @@ impl InferenceSession {
         }
     }
 
-
     pub fn is_active(&self) -> bool {
         self.active_process.is_some()
     }
