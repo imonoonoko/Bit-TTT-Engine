@@ -109,7 +109,42 @@ Single-file format containing:
 - Header JSON (config + tokenizer)
 - Safetensors body
 
-## 5. Training Parameters
+## 5. GUI Architecture (Bit-Llama Studio)
+
+From v0.3.0 (Refactor V3), the GUI is based on the following design.
+
+### 5.1 Tab Structure (`gui/tabs`)
+| Tab | Module | Function |
+|-----|--------|----------|
+| **Model Lab** | `model_lab.rs` | Model Loading, Soul (.soul) Management, Sleep Control |
+| **Chat** | `inference.rs` | Specialized for AI interaction (No system logs) |
+| **Settings** | `settings.rs` | Temperature, System Prompt settings |
+
+### 5.2 Event-Driven Model (`gui/mod.rs`)
+- **Centralized Polling**: `poll_inference_events` executes every frame within the `update()` loop.
+- **Async Communication**: Inference thread (`InferenceSession`) and GUI communicate via `mpsc::channel`.
+- **State Management**: `is_dreaming` (Sleep) flag enforces exclusive control over chat input and model operations.
+
+## 6. Soul Architecture
+
+The specification for "Adaptive Learning and Persistence", the core of Bit-TTT.
+
+### 6.1 Soul File (`.soul`)
+A binary file serializing the trained state (hidden states) of TTT layers.
+- **Format**: Rust `bincode` or `Safetensors` (Future expansion)
+- **Content**: `w_states` (weight matrices) of all TTT layers
+- **Dependency**: Strongly depends on the base model architecture (dimensions, layers).
+
+### 6.2 Sleep Mode
+1. **Accumulation**: User conversations are saved to `workspace/memories/YYYY-MM-DD.jsonl`.
+2. **Dreaming**:
+   - Triggered by `/sleep` command.
+   - High-speed Replay of past conversation logs.
+   - Temporarily boosts learning rate (`inner_lr`) to firmly fix short-term memory.
+3. **Wake Up**:
+   - After learning completes, the updated `w_states` are written to disk as a `.soul` file.
+
+## 7. Training Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -122,15 +157,15 @@ Single-file format containing:
 | `min_lr` | 1e-5 | Minimum learning rate |
 | `save_interval` | 500 | Checkpoint save frequency |
 
-## 6. Hardware Requirements
+## 8. Hardware Requirements
 
-| Configuration | Minimum VRAM | Recommended |
-|---------------|--------------|-------------|
+| Configuration | Min VRAM | Recommended |
+|---------------|----------|-------------|
 | 256-dim, 8-layer | 2 GB | 4 GB |
 | 512-dim, 12-layer | 4 GB | 8 GB |
 | 1024-dim, 24-layer | 8 GB | 16 GB |
 
-## 7. API Reference
+## 9. API Reference
 
 ### Rust API
 ```rust
@@ -157,4 +192,4 @@ logits = model.forward(token_id=42)
 
 ---
 
-*Bit-TTT Engine Specification v1.0.0*
+*Bit-TTT Engine Specification v1.1.0*

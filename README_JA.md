@@ -9,21 +9,36 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 [![Build Status](https://github.com/imonoonoko/Bit-TTT-Engine/actions/workflows/rust.yml/badge.svg)](https://github.com/imonoonoko/Bit-TTT-Engine/actions)
 
 **Pure Rustによる「1.58ビット量子化 + Test-Time Training (TTT)」実装**
+**Current Version: v0.3.0 (Model Lab Update)**
 
-[English / 英語](README.md)
+[English / 英語](README.md) | [📖 ユーザーガイド (User Guide)](docs/USER_GUIDE_JA.md)
 
 ---
 
 ## ✨ Bit-TTT Engineとは？ (3行で)
 1. **超軽量**: **1.58ビット(三値)量子化**により、低スペックPCでも巨大モデルが稼働。
-2. **適応学習 (TTT)**: 推論*中*に学習し続けることで、文脈に合わせてリアルタイムに賢くなります。
-3. **Pure Rust**: PyTorch依存なし。単一のバイナリまたは `pip install` だけで動きます。
+2. **適応学習 (TTT)**: 会話するたびに「魂」が成長し、文脈に合わせてリアルタイムに賢くなります。
+3. **Pure Rust**: PyTorch依存なし。単一のバイナリで「身体（モデル）」と「魂（記憶）」を管理できます。
+
+---
+
+## 🚀 v0.3.0 新機能: Model Lab & Sleep Mode
+
+*   **🔬 Model Lab**: モデルロードと「魂 (.soul)」の管理専用タブ。
+*   **🌙 Sleep Mode**: 会話ログを夢で見ながら（高速リプレイ学習）、短期記憶を長期記憶へ定着させる機能。
+*   **💬 Chat UI**: システムログを分離し、純粋な会話のみを楽しめるように改善。
 
 ---
 
 ## 🚀 5分で始めるクイックスタート
 
-### 方法A: Pythonで試す (簡単)
+### 方法A: バイナリでチャット (推奨)
+1.  **配布されたZipを解凍**
+2.  **`start_gui.bat` (または `bit_llama.exe`) を実行**
+3.  **Model Lab** タブでモデルをロードし、**Chat** タブで会話を開始！
+    *   詳しい使い方は [ユーザーガイド](docs/USER_GUIDE_JA.md) を参照してください。
+
+### 方法B: Pythonで試す (開発者向け)
 **前提**: Windows x64, Python 3.10
 *(※他の環境の方は「ソースからビルド」を参照してください)*
 
@@ -38,14 +53,6 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
    # 10Mパラメータのサンプルモデルを自動ロードして動作確認します。
    ```
 
-   ```
-
-### 方法B: バイナリでチャット (最速)
-1. **起動スクリプトを実行**
-   ```bash
-   ./launch_chat.bat
-   ```
-
 ---
 
 ## 💻 動作環境 (System Requirements)
@@ -54,7 +61,7 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 - **GPU**: NVIDIA GeForce GTX 10 Series (Pascal) 以降推奨。
     - **CUDA 12.x 対応のドライバ (v530以降)** が必要です。
     - ※Toolkitのインストールは不要です（ランタイムDLL同梱済み）。
-- **VRAM**: 6GB以上推奨。
+- **VRAM**: 4GB以上推奨 (10Mモデルなら2GBでも可)。
 
 ---
 
@@ -70,15 +77,18 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 
 ---
 
-## 🏗️ ディレクトリ構造 (Refactor V2)
+## 🏗️ ディレクトリ構造 (Refactor V3)
 
 ```text
 Bit-TTT/
 ├── crates/             # ソースコード (Rust)
-├── workspace/          # ユーザーデータ (Project, Model)
+├── workspace/          # ユーザーデータ (Project, Model, Memories)
+│   ├── projects/       # プロジェクト設定
+│   ├── models/         # モデルファイル (.safetensors)
+│   └── memories/       # 会話ログ (.jsonl)
 ├── assets/             # デフォルト設定・プリセット
-├── dist/               # 配布用バイナリ・ホイール
-└── tools/              # 開発用スクリプト
+├── dist/               # 配布用バイナリ
+└── docs/               # ドキュメント (User Guide, Specifications)
 ```
 
 ## 🛠️ 開発者向け
@@ -87,7 +97,7 @@ Bit-TTT/
 ```bash
 git clone https://github.com/imonoonoko/Bit-TTT-Engine.git
 cd Bit-TTT-Engine
-cargo build --release
+cargo build --release -p bit_llama --features cuda
 ```
 
 ### Pythonバインディング開発

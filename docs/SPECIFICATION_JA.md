@@ -109,7 +109,42 @@ Bit-TTT Engine は以下の最先端技術を組み合わせた高性能言語�
 - ヘッダJSON (config + tokenizer)
 - Safetensorsボディ
 
-## 5. 学習パラメータ
+## 5. GUIアーキテクチャ (Bit-Llama Studio)
+
+v0.3.0 (Refactor V3) 以降、GUIは以下の設計に基づいています。
+
+### 5.1 タブ構成 (`gui/tabs`)
+| タブ | モジュール | 機能 |
+|------|------------|------|
+| **Model Lab** | `model_lab.rs` | モデルロード、Soul (.soul) 管理、Sleep制御 |
+| **Chat** | `inference.rs` | AIとの対話のみに特化 (ログ表示なし) |
+| **Settings** | `settings.rs` | 温度パラメータ、システムプロンプト設定 |
+
+### 5.2 イベント駆動モデル (`gui/mod.rs`)
+- **中央集権的ポーリング**: `update()` ループ内で `poll_inference_events` を毎フレーム実行。
+- **非同期通信**: 推論スレッド (`InferenceSession`) と GUI は `mpsc::channel` で通信。
+- **状態管理**: `is_dreaming` (Sleep中) フラグにより、チャット入力やモデル操作を排他制御。
+
+## 6. Soul Architecture (魂の構造)
+
+Bit-TTT の核心である「適応学習と永続化」の仕様です。
+
+### 6.1 Soul File (`.soul`)
+Soulファイルは、TTTレイヤーの学習済み状態（隠れ状態）をシリアライズしたバイナリです。
+- **形式**: Rust `bincode` または `Safetensors` (将来拡張)
+- **内容**: 全TTTレイヤーの `w_states` (重み行列)
+- **依存性**: ベースモデルのアーキテクチャ（次元数・層数）に強く依存します。
+
+### 6.2 Sleep Mode (睡眠学習)
+1. **蓄積**: ユーザーとの会話は `workspace/memories/YYYY-MM-DD.jsonl` に保存。
+2. **夢 (Dreaming)**:
+   - `/sleep` コマンドで発動。
+   - 過去の会話ログを高速で再入力 (Replay)。
+   - 学習率 (`inner_lr`) を一時的に上げ、短期記憶を強固に定着させる。
+3. **起床 (Wake Up)**:
+   - 学習完了後、更新された `w_states` を `.soul` ファイルとしてディスクに書き出し。
+
+## 7. 学習パラメータ
 
 | パラメータ | デフォルト | 説明 |
 |------------|-----------|------|
@@ -122,7 +157,7 @@ Bit-TTT Engine は以下の最先端技術を組み合わせた高性能言語�
 | `min_lr` | 1e-5 | 最小学習率 |
 | `save_interval` | 500 | チェックポイント保存頻度 |
 
-## 6. ハードウェア要件
+## 8. ハードウェア要件
 
 | 構成 | 最小VRAM | 推奨 |
 |------|----------|------|
@@ -130,7 +165,7 @@ Bit-TTT Engine は以下の最先端技術を組み合わせた高性能言語�
 | 512-dim, 12層 | 4 GB | 8 GB |
 | 1024-dim, 24層 | 8 GB | 16 GB |
 
-## 7. API リファレンス
+## 9. API リファレンス
 
 ### Rust API
 ```rust
@@ -157,4 +192,4 @@ logits = model.forward(token_id=42)
 
 ---
 
-*Bit-TTT Engine 技術仕様書 v1.0.0*
+*Bit-TTT Engine 技術仕様書 v1.1.0*

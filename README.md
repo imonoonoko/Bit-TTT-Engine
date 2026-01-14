@@ -9,21 +9,36 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 [![Build Status](https://github.com/imonoonoko/Bit-TTT-Engine/actions/workflows/rust.yml/badge.svg)](https://github.com/imonoonoko/Bit-TTT-Engine/actions)
 
 **1.58-bit Quantization + Test-Time Training (TTT)** Implementation in Pure Rust.
+**Current Version: v0.3.0 (Model Lab Update)**
 
-[日本語 / Japanese](README_JA.md)
+[日本語 / Japanese](README_JA.md) | [📖 User Guide](docs/USER_GUIDE.md)
 
 ---
 
 ## ✨ What is Bit-TTT? in 3 Lines
 1. **Ultra-Light**: Runs large LLMs on cheap hardware using **1.58-bit (ternary) weights**.
-2. **Adaptive (TTT)**: Learns *while* inferring, adapting to context in real-time.
-3. **Pure Rust**: No PyTorch dependencies. Single binary or pip installable.
+2. **Adaptive (TTT)**: Learns *while* inferring, adapting to context in real-time as a "Soul".
+3. **Pure Rust**: No PyTorch dependencies. Single binary manages both "Body" (Model) and "Soul" (Memory).
+
+---
+
+## 🚀 v0.3.0 New Features: Model Lab & Sleep Mode
+
+*   **🔬 Model Lab**: Dedicated tab for managing Model Loading and "Soul (.soul)" persistence.
+*   **🌙 Sleep Mode**: Consolidates short-term memory into long-term memory by "dreaming" (fast replay learning) conversation logs.
+*   **💬 Chat UI**: Separated system logs to focus purely on conversation.
 
 ---
 
 ## 🚀 5-Minute Quick Start
 
-### Option A: Python (Easiest)
+### Option A: Binary Chat (Recommended)
+1.  **Unzip the distributed package**
+2.  **Run `start_gui.bat` (or `bit_llama.exe`)**
+3.  Load a model in **Model Lab** tab, then start talking in **Chat** tab!
+    *   See [User Guide](docs/USER_GUIDE.md) for details.
+
+### Option B: Python (Developer)
 **Prerequisites**: Windows x64, Python 3.10
 *(For Linux/Mac, see "Build from Source" below)*
 
@@ -38,16 +53,6 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
    # Auto-downloads a tiny 10M sample model and runs it.
    ```
 
-   ```
-
-### Option B: Binary (Fastest)
-Ideal for just chatting.
-
-1. **Run Launch Script**
-   ```bash
-   ./launch_chat.bat
-   ```
-
 ---
 
 ## 💻 System Requirements
@@ -56,7 +61,7 @@ Ideal for just chatting.
 - **GPU**: NVIDIA GeForce GTX 10 Series (Pascal) or newer recommended.
     - Requires **CUDA 12.x compatible Driver** (v530 or higher).
     - **Note**: CUDA Toolkit installation is **NOT** required (Runtime DLLs are bundled).
-- **VRAM**: 6GB+ recommended.
+- **VRAM**: 4GB+ recommended (2GB minimal for 10M models).
 
 ---
 
@@ -72,15 +77,18 @@ Ideal for just chatting.
 
 ---
 
-## 🏗️ Architecture (Refactor V2)
+## 🏗️ Architecture (Refactor V3)
 
 ```text
 Bit-TTT/
 ├── crates/             # The Code (Rust)
-├── workspace/          # Your Data (Projects, Models)
+├── workspace/          # User Data (Projects, Models, Memories)
+│   ├── projects/       # Project Configs
+│   ├── models/         # Model Files (.safetensors)
+│   └── memories/       # Conversation Logs (.jsonl)
 ├── assets/             # Defaults & Configs
-├── dist/               # Binaries & Wheels
-└── tools/              # DevOps Scripts
+├── dist/               # Binaries
+└── docs/               # Docs (User Guide, Specifications)
 ```
 
 ## 🛠️ Development
@@ -89,7 +97,7 @@ Bit-TTT/
 ```bash
 git clone https://github.com/imonoonoko/Bit-TTT-Engine.git
 cd Bit-TTT-Engine
-cargo build --release
+cargo build --release -p bit_llama --features cuda
 ```
 
 ### Python Bindings
