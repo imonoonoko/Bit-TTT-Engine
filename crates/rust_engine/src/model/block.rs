@@ -37,9 +37,9 @@ impl BitLlamaBlock {
         })
     }
 
-    pub fn precompute_for_inference(&mut self) -> Result<()> {
-        self.ttt.precompute_for_inference()?;
-        self.mlp.precompute_for_inference()?;
+    pub fn precompute_packed(&mut self) -> Result<()> {
+        self.ttt.precompute_packed()?;
+        self.mlp.precompute_packed()?;
         Ok(())
     }
 

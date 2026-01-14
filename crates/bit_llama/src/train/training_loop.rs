@@ -449,11 +449,17 @@ pub fn run(args: TrainArgs) -> Result<()> {
                 step, val, current_lr, avg_tokens_per_sec
             );
 
+            // Debug VRAM
+            if let Ok((free, total)) = cortex_rust::device_utils::get_vram_info(0) {
+                let used_mb = (total - free) as f64 / 1024.0 / 1024.0;
+                info!("       [VRAM] Used: {:.2} MB / Total: {:.2} MB", used_mb, total as f64 / 1024.0 / 1024.0);
+            }
+
             if args.benchmark {
                 continue;
             }
 
-            if step % 50 == 0 && step > 0 && val < best_loss {
+            if step % 200 == 0 && step > 0 && val < best_loss {
                 best_loss = val;
                 info!(
                     "🏆 New best loss: {:.4} (Step {}) - Saving model_best.safetensors",

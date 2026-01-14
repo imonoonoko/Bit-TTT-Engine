@@ -119,7 +119,7 @@ impl ScheduleFreeOptimizer {
             // Then after backward, we MUST set them back to 'x' (updated x).
 
             // y = (1-b)z + b*x
-            let y_i = ((z_i * one_minus_b)? + (c_i * b)?)?;
+            let y_i = ((z_i * one_minus_b)? + (c_i * b)?)?.detach();
             var.set(&y_i)?;
         }
         Ok(())
@@ -155,7 +155,7 @@ impl ScheduleFreeOptimizer {
                 // 2. Update z (Optimization Step)
                 // z_new = z_old - lr * grad
                 // (Apply weight decay if needed)
-                let z_new = (z_i - (grad * lr)?)?;
+                let z_new = (z_i - (grad * lr)?)?.detach();
 
                 // 3. Update x (Averaging)
                 // x_new = (1 - 1/k+1)x_old + (1/k+1)z_new
@@ -164,7 +164,7 @@ impl ScheduleFreeOptimizer {
 
                 let x_part = (x_old * one_minus_k)?;
                 let z_part = (&z_new * k_inv)?;
-                let x_new = (x_part + z_part)?;
+                let x_new = (x_part + z_part)?.detach();
 
                 // 4. Store State
                 self.z[i] = z_new;

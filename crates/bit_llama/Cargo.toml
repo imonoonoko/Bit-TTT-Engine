@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-candle-core = { version = "0.8.0" }
-candle-nn = { version = "0.8.0" }
+candle-core = { version = "=0.8.4" }
+candle-nn = { version = "=0.8.4" }
 tokenizers = { version = "0.22", features = ["http"] }
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }

@@ -32,7 +32,7 @@ pub fn run(args: EvaluateArgs) -> Result<()> {
     info!("Data:  {}", args.data);
 
     let mut llama = Llama::load_auto(&args.model)?;
-    llama.model.precompute_for_inference()?;
+    llama.model.precompute_packed()?;
     info!("Model loaded successfully on {:?}", llama.device);
 
     let mut loader = BitLoader::new(&args.data)?;

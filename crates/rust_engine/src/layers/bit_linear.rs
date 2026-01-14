@@ -14,8 +14,6 @@ pub struct BitLinear {
     pub in_features: usize,
     #[allow(dead_code)]
     pub out_features: usize,
-    /// Pre-computed weights for inference (W_quant.T) - Legacy f32 path
-    pub inference_params: Option<Tensor>,
     /// Simply-packed weights for 1.58-bit kernels (Dual Device Support)
     pub packed_params: Option<PackedTensor>,
 }
@@ -30,7 +28,6 @@ impl BitLinear {
             weight,
             in_features: in_dim,
             out_features: out_dim,
-            inference_params: None,
             packed_params: None,
         })
     }
@@ -41,16 +38,6 @@ impl BitLinear {
         // It populates `self.packed_params`.
         let packed = PackedTensor::pack(&self.weight)?;
         self.packed_params = Some(packed);
-        Ok(())
-    }
-
-    pub fn precompute_for_inference(&mut self) -> Result<()> {
-        let w = &self.weight;
-        let scale = w.abs()?.mean_all()?;
-        let w_scaled = (w / scale.to_scalar::<f32>()? as f64)?;
-        let w_quant = w_scaled.round()?.clamp(-1.0, 1.0)?;
-        let w_quant_t = w_quant.t()?.detach();
-        self.inference_params = Some(w_quant_t);
         Ok(())
     }
 
@@ -65,26 +52,19 @@ impl BitLinear {
                 }
                 Device::Cuda(_) => {
                     // Use Custom CUDA Kernel (BitNet)
-                    // Note: Ideally BitLinearCuda::forward should handle this.
-                    // It currently has a stub, but we will wire it up.
                     return BitLinearCuda::forward(x, packed);
                 }
                 _ => {
                     // Fallback to Metal/etc if we implement them later
-                    // For now, fall through to legacy path or error?
-                    // Let's fall through to legacy path if possible (need unpacking)
-                    // Or usually if x is on Metal, weights should be too.
-                    // But PackedTensor might support Metal in future.
                 }
             }
         }
 
-        // 2. Legacy f32 Path (For verification or unsupported devices)
-        if let Some(w_t) = &self.inference_params {
-            return x.matmul_robust(w_t);
-        }
-
         // 3. Training Path (STE)
+        // Legacy STE Path (Should NOT be reached in production if packed)
+        #[cfg(debug_assertions)]
+        eprintln!("⚠️ BitLinear: Falling back to Legacy STE path (slow!)");
+
         let w = &self.weight;
         let scale = w.abs()?.mean_all()?;
         let w_scaled = (w / scale.to_scalar::<f32>()? as f64)?;

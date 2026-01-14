@@ -1,7 +1,8 @@
 use anyhow::Result;
 
 #[cfg(feature = "cuda")]
-use cudarc::driver::{CudaDevice, DriverError};
+use cudarc::driver::CudaDevice;
+// DriverError is not used, removing it.
 
 /// Returns (free_memory, total_memory) in bytes for the specified device.
 /// Returns (0, 0) if CUDA is not available or disabled.
@@ -14,10 +15,10 @@ pub fn get_vram_info(_device_id: usize) -> Result<(usize, usize)> {
 
         // Note: CudaDevice::new might be heavy or fail if no GPU.
         match CudaDevice::new(_device_id) {
-            Ok(dev) => {
-                // mem_info returns Result<(usize, usize), DriverError>
-                // (free, total)
-                let (free, total) = dev.mem_info()?;
+            Ok(_dev) => {
+                // Use driver::result::mem_get_info which wraps cuMemGetInfo_v2
+                use cudarc::driver::result::mem_get_info;
+                let (free, total) = mem_get_info()?;
                 Ok((free, total))
             }
             Err(e) => {

@@ -26,7 +26,7 @@ pub fn run(args: InferenceArgs) -> Result<()> {
         )
     })?;
 
-    llama.model.precompute_for_inference()?;
+    llama.model.precompute_packed()?;
 
     println!("✅ Model Loaded!");
 

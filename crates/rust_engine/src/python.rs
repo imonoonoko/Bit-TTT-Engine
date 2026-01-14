@@ -49,7 +49,7 @@ impl PyBitLlama {
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         model
-            .precompute_for_inference()
+            .precompute_packed()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         let d_small = config.hidden_dim / 4;

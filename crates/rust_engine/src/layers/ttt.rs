@@ -36,9 +36,9 @@ impl TTTLayer {
         })
     }
 
-    pub fn precompute_for_inference(&mut self) -> Result<()> {
-        self.proj_down.precompute_for_inference()?;
-        self.proj_up.precompute_for_inference()?;
+    pub fn precompute_packed(&mut self) -> Result<()> {
+        self.proj_down.precompute_packed()?;
+        self.proj_up.precompute_packed()?;
         Ok(())
     }
 

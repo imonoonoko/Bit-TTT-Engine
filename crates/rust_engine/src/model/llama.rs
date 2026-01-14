@@ -113,9 +113,9 @@ impl BitLlama {
         })
     }
 
-    pub fn precompute_for_inference(&mut self) -> Result<()> {
+    pub fn precompute_packed(&mut self) -> Result<()> {
         for layer in self.layers.iter_mut() {
-            layer.precompute_for_inference()?;
+            layer.precompute_packed()?;
         }
         Ok(())
     }
@@ -362,7 +362,7 @@ impl Llama {
         )?;
 
         let mut model = BitLlama::load(config, vb)?;
-        model.precompute_for_inference()?;
+        model.precompute_packed()?;
 
         let d_small = config.hidden_dim / 4;
         let mut w_states = Vec::new();
@@ -433,7 +433,7 @@ impl Llama {
         };
 
         let mut model = BitLlama::load(config, vb)?;
-        model.precompute_for_inference()?;
+        model.precompute_packed()?;
 
         let d_small = config.hidden_dim / 4;
         let mut w_states = Vec::new();

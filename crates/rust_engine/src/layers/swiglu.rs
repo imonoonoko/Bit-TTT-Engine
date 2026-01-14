@@ -34,10 +34,10 @@ impl SwiGLU {
         self.w2.forward(&hidden)
     }
 
-    pub fn precompute_for_inference(&mut self) -> Result<()> {
-        self.w1.precompute_for_inference()?;
-        self.w2.precompute_for_inference()?;
-        self.w3.precompute_for_inference()?;
+    pub fn precompute_packed(&mut self) -> Result<()> {
+        self.w1.precompute_packed()?;
+        self.w2.precompute_packed()?;
+        self.w3.precompute_packed()?;
         Ok(())
     }
 }
