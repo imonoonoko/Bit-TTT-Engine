@@ -174,7 +174,7 @@ impl PyTrainer {
         let mut varmap = VarMap::new();
         let vb = candle_nn::VarBuilder::from_varmap(&varmap, DType::F32, &device);
         // Note: We use clone() heavily for config here.
-        let model = BitLlama::load(config.clone(), vb)
+        let model = BitLlama::load(config, vb)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         // Load Weights if provided
