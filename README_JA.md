@@ -23,11 +23,13 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 ## 🚀 5分で始めるクイックスタート
 
 ### 方法A: Pythonで試す (簡単)
-1. **インストール** (Windows/Linux/Mac)
+**前提**: Windows x64, Python 3.10
+*(※他の環境の方は「ソースからビルド」を参照してください)*
+
+1. **インストール**
    ```bash
    pip install dist/python/cortex_rust-0.1.0-cp310-cp310-win_amd64.whl
    ```
-   *(※現在ホイールはビルド後に `dist/python` に生成されます)*
 
 2. **Hello World**
    ```bash

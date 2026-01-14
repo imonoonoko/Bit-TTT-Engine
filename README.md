@@ -23,13 +23,13 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 ## 🚀 5-Minute Quick Start
 
 ### Option A: Python (Easiest)
-Ideal for testing integration.
+**Prerequisites**: Windows x64, Python 3.10
+*(For Linux/Mac, see "Build from Source" below)*
 
-1. **Install** (Windows/Linux/Mac)
+1. **Install**
    ```bash
    pip install dist/python/cortex_rust-0.1.0-cp310-cp310-win_amd64.whl
    ```
-   *(Note: Wheels are currently provided in `dist/python` after build)*
 
 2. **Run Hello World**
    ```bash
