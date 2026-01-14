@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.2.0] - 2026-01-14
+**Python Integration & Architecture Upgrade Release**
+
+### Phase 5: Python Integration (PyO3)
+
+#### 🐍 Cortex Rust (Python Bindings)
+-   **PyTrainer**: Implemented a full training loop interface exposed to Python. Supports:
+    -   `train_step`: Single step training with GIL release (True Parallelism).
+    -   `save_checkpoint`: Saves both model weights and `ScheduleFreeOptimizer` state (momentum/Z) for resume capability.
+    -   `VarMap`: State interactions mapped to Candle's variable system.
+-   **BitLlama Inference**:
+    -   `BitLlama` wrapper for direct inference from Python.
+    -   `generate_tokens`: High-performance token generation loop implemented in Rust with GIL release.
+-   **Type Hints**: Added `cortex_rust.pyi` for full Intellisense support in VSCode/PyCharm.
+
+#### 🔧 Core Engine Improvements
+-   **Optimizer Upgrade**: `ScheduleFreeOptimizer` now exposes internal `z` (momentum) state for serialization.
+-   **Thread Safety**: Implemented `sorted_vars` logic to ensure deterministic optimizer state saving despite `HashMap` randomness.
+-   **Safety**: Resolved `clippy::clone-on-copy` and other static analysis warnings.
+
 ## [v0.1.0] - 2026-01-13
 **Optimized Tokenizer & Refactoring Release**
 

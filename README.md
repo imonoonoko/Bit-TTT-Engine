@@ -143,6 +143,7 @@ maturin develop --release
 ```python
 import cortex_rust
 
+# 1. Configuration
 config = cortex_rust.BitLlamaConfig(
     vocab_size=16384,
     hidden_dim=256,
@@ -150,8 +151,19 @@ config = cortex_rust.BitLlamaConfig(
     inner_lr=0.1
 )
 
+# 2. Inference (BitLlama)
 model = cortex_rust.BitLlama(config, "model.safetensors", device="cuda")
-logits = model.forward(token_id=42)
+# Generate tokens efficiently (GIL released)
+tokens = model.generate_tokens([1, 2, 3], max_new_tokens=20)
+
+# 3. Training (PyTrainer) - NEW in Phase 5
+trainer = cortex_rust.PyTrainer(config)
+# Single step training with 1.58-bit quantization & TTT
+loss = trainer.train_step([101, 202], [202, 303])
+print(f"Loss: {loss}")
+
+# Save Checkpoint (Weights + Optimizer State)
+trainer.save_checkpoint("checkpoints/epoch_1.safetensors")
 ```
 
 ## 💖 Support
