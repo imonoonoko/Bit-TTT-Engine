@@ -53,7 +53,7 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 - **OS**: Windows 10 / 11 (64-bit)
 - **GPU**: NVIDIA GeForce GTX 10 Series (Pascal) 以降推奨。
     - **CUDA 12.x 対応のドライバ (v530以降)** が必要です。
-    - ※Toolkitのインストールは不要です（DriverのみでOK）。
+    - ※**CUDA Toolkit 12.x** (またはランタイムDLL) のインストールが必要です。
 - **VRAM**: 6GB以上推奨。
 
 ---

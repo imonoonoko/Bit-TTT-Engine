@@ -55,7 +55,7 @@ Ideal for just chatting.
 - **OS**: Windows 10 / 11 (64-bit)
 - **GPU**: NVIDIA GeForce GTX 10 Series (Pascal) or newer recommended.
     - Requires **CUDA 12.x compatible Driver** (v530 or higher).
-    - **Note**: CUDA Toolkit installation is **NOT** required (Driver only).
+    - **Note**: **CUDA Toolkit 12.x** (or Runtime libraries) **IS** required for execution.
 - **VRAM**: 6GB+ recommended.
 
 ---
