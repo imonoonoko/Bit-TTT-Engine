@@ -72,15 +72,27 @@ Bit-TTT Engine
 
 ## 🔧 `tools/` (Utility Scripts)
 
-開発や運用を補助するスクリプト群です。原則として PowerShell (`.ps1`) で提供されます。
+開発や運用を補助するスクリプト群です。
 
-| ファイル | 用途 |
+| ファイル/フォルダ | 用途 |
 |---|---|
 | `BitLlama-Train.ps1` | `train_llama` を適切な引数で起動するラッパー。 |
 | `BitLlama-Chat.ps1` | `bit_llama` (推論) を起動するラッパー。 |
 | `BitLlama-GUI.ps1` | GUI版トレーナーを起動する。 |
-| `pre_demon.py` | **Demon Audit** | コードベースの健全性チェック (TODO警告、危険パターン検出)。 |
-| `pre_commit_check.py` | Git Hook用 | コミット前の大容量ファイルチェック。 |
+| `pre_demon.py` | **Demon Audit** | コードベースの健全性チェック。 |
+| `pre_commit_check.py` | Git Hook用。コミット前の大容量ファイルチェック。 |
+| `benchmarks/` | パフォーマンス測定用スクリプト (PyTorch比較など)。 |
+| `utils/` | その他ユーティリティ。 |
+
+---
+
+## 📂 その他の重要ディレクトリ
+
+| ディレクトリ | 説明 |
+|---|---|
+| `examples/` | Python推論の実装例 (`python_inference.py`) など。 |
+| `projects/` | GUIトレーナーで使用するプロジェクト保存先 (ユーザーデータ)。 |
+| `release/` | ビルド済みバイナリや配布用アーティファクトの格納先。 |
 
 ---
 
