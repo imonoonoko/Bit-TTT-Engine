@@ -33,8 +33,10 @@ fn main() -> anyhow::Result<()> {
         // build.rs runs in the cargo environment, which might not have vcvars set up for shell usage.
         let output = Command::new(&nvcc)
             .arg("-ptx")
-            .arg("-arch=compute_80") // Target Ampere (RTX 30 series+) or adjust
-            .arg("-code=sm_80")
+            // Downward compatible to Pascal (GTX 10 series)
+            // Simpler kernels (no Tensor Cores) run fine on older archs via JIT.
+            .arg("-arch=compute_61")
+            .arg("-code=sm_61")
             .arg(cuda_file)
             .arg("-o")
             .arg(&output_ptx_path)

@@ -49,6 +49,16 @@ pub struct ProjectConfig {
     pub inference_temp: f64,
     #[serde(default = "default_max_tokens")]
     pub inference_max_tokens: usize,
+
+    // Phase 12: MeZO & Instruct
+    #[serde(default)]
+    pub use_mezo: bool,
+    #[serde(default = "default_epsilon")]
+    pub epsilon: f64,
+    #[serde(default)]
+    pub instruct_path: String,
+    #[serde(default, skip)]
+    pub mock: bool,
 }
 
 fn default_input_pattern() -> String {
@@ -65,6 +75,9 @@ fn default_accum_steps() -> usize {
 }
 fn default_profile() -> String {
     "consumer".to_string()
+}
+fn default_epsilon() -> f64 {
+    1e-3
 }
 
 impl Default for ProjectConfig {
@@ -93,6 +106,10 @@ impl Default for ProjectConfig {
             use_template: false,
             inference_temp: default_temp(),
             inference_max_tokens: default_max_tokens(),
+            use_mezo: false,
+            epsilon: 1e-3,
+            instruct_path: "".to_string(),
+            mock: false,
         }
     }
 }
@@ -123,6 +140,10 @@ impl ProjectConfig {
             use_template: false,
             inference_temp: default_temp(),
             inference_max_tokens: default_max_tokens(),
+            use_mezo: false, // Default context
+            epsilon: args.epsilon,
+            instruct_path: "".to_string(),
+            mock: args.mock,
         }
     }
 
@@ -185,7 +206,14 @@ impl ProjectConfig {
 
         let overhead_mb = 256.0; // Runtime overhead (CUDA/PyTorch/Candle)
 
-        let total_bitttt = model_mb_bitttt + kv_total_mb + overhead_mb;
+        let total_bitttt = if self.use_mezo {
+            // MeZO Training (O(1) Memory): Model + Small Buffer (No KV Cache/Graph)
+            model_mb_bitttt + overhead_mb + 128.0
+        } else {
+            // Standard Inference / Validation Cost
+            model_mb_bitttt + kv_total_mb + overhead_mb
+        };
+
         let total_fp16 = model_mb_fp16 + kv_total_mb + overhead_mb;
 
         let (status, color) = if total_bitttt < 8000.0 {

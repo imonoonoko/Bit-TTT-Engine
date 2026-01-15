@@ -2,6 +2,7 @@ use eframe::egui;
 use std::env;
 use std::process::Command;
 
+use crate::data::instruct::TemplateType;
 use crate::data::preprocess::{self, PreprocessArgs};
 use crate::gui::i18n::{t, t_tooltip, Language};
 use crate::state::ProjectState;
@@ -140,6 +141,102 @@ pub fn show_data_prep(ui: &mut egui::Ui, project: &mut ProjectState, language: L
             ui.label(
                 egui::RichText::new(t(language, "tokenizer_ready")).color(egui::Color32::GREEN),
             );
+        }
+    });
+
+    ui.add_space(10.0);
+
+    ui.group(|ui| {
+        ui.heading("📚 Lesson Preparation (Instruct Tuning)");
+        ui.label("Prepare teaching materials (JSON) for the AI.");
+
+        // File Selector
+        ui.horizontal(|ui| {
+            ui.label("Lesson Plan (JSON):");
+            if ui.button("📂 Open...").clicked() {
+                if let Some(file) = rfd::FileDialog::new()
+                    .add_filter("JSON", &["json"])
+                    .pick_file()
+                {
+                    project.config.instruct_path = file.to_string_lossy().to_string();
+                }
+            }
+        });
+        ui.label(format!("Path: {}", project.config.instruct_path));
+
+        ui.add_space(5.0);
+
+        // Template Selector
+        ui.horizontal(|ui| {
+            ui.label("Template:");
+            egui::ComboBox::from_id_source("template_selector")
+                .selected_text(format!("{:?}", project.instruct_template))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut project.instruct_template,
+                        TemplateType::Alpaca,
+                        "Alpaca",
+                    );
+                    ui.selectable_value(
+                        &mut project.instruct_template,
+                        TemplateType::ChatML,
+                        "ChatML",
+                    );
+                    ui.selectable_value(
+                        &mut project.instruct_template,
+                        TemplateType::Llama2,
+                        "Llama2",
+                    );
+                    ui.selectable_value(&mut project.instruct_template, TemplateType::Raw, "Raw");
+                });
+        });
+
+        ui.add_space(10.0);
+
+        if ui.button("🚀 Prepare Lesson").clicked() {
+            if project.config.instruct_path.is_empty() {
+                project.log("❌ Please select a JSON file first.");
+            } else {
+                let input = project.config.instruct_path.clone();
+                let output = project
+                    .path
+                    .join("data/instruct")
+                    .to_string_lossy()
+                    .into_owned();
+
+                // Use default tokenizer path logic
+                let tokenizer = project
+                    .path
+                    .join("data/tokenizer.json")
+                    .to_string_lossy()
+                    .into_owned();
+
+                let template_str = match project.instruct_template {
+                    TemplateType::Alpaca => "alpaca",
+                    TemplateType::ChatML => "chat-ml",
+                    TemplateType::Llama2 => "llama2",
+                    TemplateType::Raw => "raw",
+                };
+
+                // Use current exe
+                let exe = env::current_exe().unwrap_or_default();
+                let exe_str = exe.to_string_lossy().to_string();
+
+                let args = vec![
+                    "data",
+                    "prepare-instruct",
+                    "--input",
+                    &input,
+                    "--output",
+                    &output,
+                    "--tokenizer",
+                    &tokenizer,
+                    "--template",
+                    template_str,
+                ];
+
+                project.run_command(&exe_str, &args, crate::state::TaskType::Preprocessing);
+            }
         }
     });
 }

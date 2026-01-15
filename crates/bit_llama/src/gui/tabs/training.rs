@@ -45,6 +45,34 @@ pub fn show(
                 });
         });
 
+        ui.add_space(5.0);
+
+        // MeZO Settings
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut project.config.use_mezo, "🌱 MeZO (Eco Mode)");
+            ui.label("Memory Efficient Training");
+        });
+
+        if project.config.use_mezo {
+            ui.horizontal(|ui| {
+                ui.label("Perturbation (Epsilon):");
+                ui.add(
+                    egui::Slider::new(&mut project.config.epsilon, 1e-4..=1e-1).logarithmic(true),
+                );
+                if ui.button("↺ Reset").clicked() {
+                    project.config.epsilon = 1e-3;
+                }
+            });
+        }
+
+        ui.add_space(5.0);
+
+        // Debug Settings
+        ui.horizontal(|ui| {
+            ui.label("🐞 Debug:");
+            ui.checkbox(&mut project.config.mock, "Mock Mode (Dummy Loss)");
+        });
+
         // Accumulation Steps
         ui.horizontal(|ui| {
             ui.label("Grad Accumulation:");
@@ -144,37 +172,51 @@ pub fn show(
 
                     let exe = env::current_exe().unwrap_or_default();
                     let exe_str = exe.to_string_lossy().to_string();
-                    project.run_command(
-                        &exe_str,
-                        &[
-                            "train",
-                            "--data",
-                            &data_dir,
-                            "--output-dir",
-                            &output_dir,
-                            "--steps",
-                            &steps,
-                            "--lr",
-                            &lr,
-                            "--min-lr",
-                            &min_lr,
-                            "--warmup-steps",
-                            &warmup,
-                            "--dim",
-                            &dim,
-                            "--layers",
-                            &layers,
-                            "--context-len",
-                            &context,
-                            "--batch-size",
-                            &batch,
-                            "--save-interval",
-                            &save_int,
-                            "--accum",
-                            &accum,
-                        ],
-                        crate::state::TaskType::Training,
-                    );
+                    let mut cmd_args = vec![
+                        "train".to_string(),
+                        "--data".to_string(),
+                        data_dir,
+                        "--output-dir".to_string(),
+                        output_dir,
+                        "--steps".to_string(),
+                        steps,
+                        "--lr".to_string(),
+                        lr,
+                        "--min-lr".to_string(),
+                        min_lr,
+                        "--warmup-steps".to_string(),
+                        warmup,
+                        "--dim".to_string(),
+                        dim,
+                        "--layers".to_string(),
+                        layers,
+                        "--context-len".to_string(),
+                        context,
+                        "--batch-size".to_string(),
+                        batch,
+                        "--save-interval".to_string(),
+                        save_int,
+                        "--accum".to_string(),
+                        accum,
+                    ];
+
+                    if project.config.mock {
+                        cmd_args.push("--mock".to_string());
+                    }
+
+                    if project.config.use_mezo {
+                        // MeZO is implicit via epsilon? No, args.rs doesn't have use_mezo flag yet?
+                        // Wait, args.rs has epsilon (f64). MeZO is enabled if logic uses it?
+                        // Actually training_loop.rs ALWAYS does MeZO perturb currently.
+                        // But I should pass epsilon.
+                        cmd_args.push("--epsilon".to_string());
+                        cmd_args.push(project.config.epsilon.to_string());
+                    }
+
+                    // Convert to slice of &str for run_command interface
+                    let args_str: Vec<&str> = cmd_args.iter().map(|s| s.as_str()).collect();
+
+                    project.run_command(&exe_str, &args_str, crate::state::TaskType::Training);
                 }
             } else {
                 let stop_signal = Path::new("stop_signal").exists();

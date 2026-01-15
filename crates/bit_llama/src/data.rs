@@ -5,6 +5,7 @@ use std::path::PathBuf;
 pub mod clean;
 pub mod concat;
 pub mod download;
+pub mod instruct;
 pub mod preprocess;
 pub mod sampler;
 
@@ -18,6 +19,8 @@ pub struct DataArgs {
 pub enum DataCommand {
     /// Preprocess text to u32 tokens (Parallel)
     Preprocess(preprocess::PreprocessArgs),
+    /// Prepare Instruction Dataset (JSON -> .u32 + .mask)
+    PrepareInstruct(instruct::PrepareInstructArgs),
     /// Download dataset
     Download(DownloadArgs),
     /// Clean text (Normalize)
@@ -48,6 +51,7 @@ pub struct CleanArgs {
 pub fn run(args: DataArgs) -> Result<()> {
     match args.command {
         DataCommand::Preprocess(a) => preprocess::run(a),
+        DataCommand::PrepareInstruct(a) => instruct::run(a),
         DataCommand::Download(a) => run_download(a),
         DataCommand::Clean(a) => run_clean(a),
     }

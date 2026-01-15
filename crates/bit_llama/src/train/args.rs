@@ -46,4 +46,10 @@ pub struct TrainArgs {
 
     #[arg(long, default_value_t = 1)]
     pub accum: usize,
+
+    #[arg(long, default_value_t = 1e-3)]
+    pub epsilon: f64,
+
+    #[arg(long, action)]
+    pub mock: bool,
 }

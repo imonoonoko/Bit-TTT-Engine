@@ -14,6 +14,7 @@ use std::thread;
 
 use crate::config::ProjectConfig;
 use crate::data::concat::Concatenator;
+use crate::data::instruct::TemplateType;
 
 // Runtime State (Not saved to disk)
 pub struct ProjectState {
@@ -44,6 +45,7 @@ pub struct ProjectState {
     // Async Control
     pub concat_cancel_flag: Arc<AtomicBool>,
     pub task_type: TaskType,
+    pub instruct_template: TemplateType,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -104,6 +106,7 @@ impl ProjectState {
             fast_vocab: true, // Default to optimized training
             concat_cancel_flag: Arc::new(AtomicBool::new(false)),
             task_type: TaskType::None,
+            instruct_template: TemplateType::Alpaca,
         };
         state.check_files();
         state

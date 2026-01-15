@@ -1,19 +1,22 @@
-# Refactor Plan: ProjectConfig Initialization
+# Quick Refactor Plan: Demon Audit Fixes
 
-## 1. Objective
-Replace manual `ProjectConfig` initialization in `training_loop.rs` with a `from_args` constructor.
-**Problem**: Adding new fields (like `n_kv_heads`) breaks compilation in `training_loop.rs` because checks are manual.
-**Solution**: Centralize initialization logic in `config.rs`.
+## 🎯 Goal
+Clean up `cargo clippy` warnings detected during the Demon Audit.
 
-## 2. Changes
+## ⚠️ Issues to Fix
+1.  **Precision Loss (`clippy::cast_possible_truncation`)**
+    -   `training_loop.rs`: `f64` -> `f32` cast in noise generation.
+    -   **Fix**: Explicitly suppress lint with justification (MeZO noise is stochastic anyway, precision loss is acceptable).
 
-### `crates/bit_llama/src/config.rs`
-- Add `pub fn from_args(args: &TrainArgs) -> Self`
-- Use `Default` base and override with args.
+2.  **Unnecessary Debug Formatting (`clippy::unnecessary_debug_formatting`)**
+    -   `training_loop.rs`: `PathBuf` printing often uses `{:?}`.
+    -   **Fix**: Change `{:?}` to `{}` and use `.display()` for `Path` objects.
 
-### `crates/bit_llama/src/train/training_loop.rs`
-- Replace `ProjectConfig { ... }` with `ProjectConfig::from_args(&args)`
+3.  **Missing Panic Documentation (`clippy::missing_panics_doc`)**
+    -   `training_loop.rs`: `perturb_weights` calls `unwrap()`.
+    -   **Fix**: Add `/// # Panics` section to the function docstring.
 
-## 3. Verification
-- `cargo check -p bit_llama`
-- `cargo build --release` (regression test)
+## 📝 Steps
+1.  Modify `perturb_weights` signature docs.
+2.  Add `#[allow(clippy::cast_possible_truncation)]` to the mapping closure.
+3.  Scan and replace `{:?}` with `{}` + `.display()` for paths in `run`.

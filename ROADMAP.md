@@ -44,7 +44,28 @@
 
 ---
 
-## � Future Phases (Legacy Identity)
+## 🐣 Phase 9: Raising Revolution (The "Tamagotchi" Phase)
+*(Goal: "Training" -> "Raising")*
+- [ ] **Pure Rust Instruct**: `PrepareInstruct` command (No Python dependency).
+- [ ] **Sleep Mode v2**: Background file feeder. "Dreams of documents".
+- [ ] **GUI Training Tab**: Drag & Drop interface for `.txt` / `.pdf`.
+- [ ] **Visual Feedback**: Progress bars that feel like "XP Bars".
+
+## 📚 Phase 10: Data Democratization (Content Phase)
+*(Goal: "No empty brain problem")*
+- [ ] **Knowledge Packs**: Distribute `.u32` binary packs (Wikipedia, Coding, etc).
+- [ ] **Personal Import**: "Import my Mail/Chat logs" wizard.
+- [ ] **Marketplace**: (Future) Share grounded souls.
+
+## 🕸️ Phase 11: Omni-Reach (Hardware Independence Phase)
+*(Goal: "Run on a toaster")*
+- [ ] **MeZO Training Engine**: Zero-memory optimization (No Backprop) for 4GB VRAM training.
+- [ ] **CPU Eco Mode**: Optimized f32/q8 CPU backend for overnight training.
+- [ ] **Seamless Resume**: Checkpoint system refactored as "Game Save".
+
+---
+
+## 🔮 Future Phases (Legacy Identity)
 *Note: Merged from previous roadmap*
 - **Phase 14**: Japanese Proficiency (Tokenizer extension).
 - **Phase 15**: Scaling to 70B (Multi-GPU/CPU offload).
