@@ -1,3 +1,12 @@
+# ❄️ Bit-TTT Engine: v∞.0 Winter Sleep (冬眠モード)
+
+> **⚠️ Project Status: 現在開発凍結中 / 燃え尽き冬眠期間**
+>
+> 開発者のSAN値が限界に達しました。無期限の冬眠に入ります。
+> "復活するかは未定。AGIができたら起こして..." - Developer
+>
+> ---
+
 # Bit-TTT Engine: 高性能AIブレイン・コア
 
 [![Featured on Orynth](https://orynth.dev/api/badge/bit-ttt-engine?theme=dark&style=default)](https://orynth.dev/projects/bit-ttt-engine)

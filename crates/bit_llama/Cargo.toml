@@ -50,7 +50,7 @@ name = "bit_llama"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["cuda"]
 cuda = ["candle-core/cuda", "candle-nn/cuda", "dep:nvml-wrapper", "cortex_rust/cuda"]
 
 [dev-dependencies]

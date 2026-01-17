@@ -1,15 +1,20 @@
 import time
 import torch
 import os
+import sys
 import psutil
 import gc
 from threading import Thread
 from pynvml import *
 
+# Force loading local cortex_rust.pyd (not site-packages version)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, PROJECT_ROOT)
+
 # Try importing cortex_rust
 try:
     import cortex_rust
-    print("✅ cortex_rust found")
+    print(f"✅ cortex_rust found at: {cortex_rust.__file__}")
 except ImportError:
     print("❌ cortex_rust not found. Make sure it is installed or in PYTHONPATH")
     exit(1)
@@ -160,7 +165,7 @@ def benchmark_bit_engine(model_dir, prompt="Hello, I am a language model,", n_to
            tokens = [128000, 1, 2, 3] # Dummy
 
     start_gen = time.time()
-    _ = model.generate_tokens(tokens, n_tokens, 0.7) # temp=0.7
+    _ = model.generate_tokens(tokens, n_tokens) # temp not supported (greedy)
     end_gen = time.time()
 
     duration = end_gen - start_gen
@@ -175,7 +180,8 @@ if __name__ == "__main__":
     CONVERTED_PATH = "models/Meta-Llama-3-8B-Adaptive-2bit"
 
     if os.path.exists(ORIGINAL_PATH):
-        benchmark_pytorch(ORIGINAL_PATH)
+        # benchmark_pytorch(ORIGINAL_PATH)
+        print("Skipping PyTorch benchmark as requested.")
     else:
         print(f"Skipping PyTorch: {ORIGINAL_PATH} not found")
 

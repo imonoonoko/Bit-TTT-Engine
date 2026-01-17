@@ -31,6 +31,6 @@ anyhow = "1.0"
 glob = "0.3"
 
 [features]
-default = ["python"]
+default = ["python", "cuda"]
 python = ["dep:pyo3"]
 cuda = ["candle-core/cuda", "candle-nn/cuda", "dep:cudarc"]

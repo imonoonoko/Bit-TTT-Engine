@@ -91,28 +91,11 @@ impl BitLlamaBlock {
         kv_cache: &mut Option<KVCache>,
         pos: usize,
     ) -> Result<(Tensor, Tensor)> {
-        // [Hybrid Guard] Ensure input is on this block's device
-        let block_device = self.device();
-        let x = if x.device().same_device(block_device) {
-            x.clone()
-        } else {
-            eprintln!(
-                "🚀 [Layer {}] Moving tensor {:?} -> {:?}",
-                pos,
-                x.device(),
-                block_device
-            );
-            let transferred = x.to_device(block_device)?;
-            eprintln!(
-                "✅ [Layer {}] Moved result: {:?}",
-                pos,
-                transferred.device()
-            );
-            transferred
-        };
+        // NOTE: Device transfer is now handled by llama.rs::forward_one
+        // using stored gpu_device/cpu_device for correct layer-to-device mapping
 
-        let residual = &x;
-        let x_norm = self.norm1.forward(&x)?;
+        let residual = x;
+        let x_norm = self.norm1.forward(x)?;
 
         let (mixed_out, w_new) = match &self.core {
             LayerDispatch::TTT(t) => {

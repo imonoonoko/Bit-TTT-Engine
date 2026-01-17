@@ -154,9 +154,13 @@ impl BitAttention {
     ) -> Result<Tensor> {
         let (b_sz, seq_len, hidden) = x.dims3()?;
 
+        // DEBUG: Unconditional Trace
+
         let q = self.q_proj.forward(x)?;
         let k_new = self.k_proj.forward(x)?;
         let v_new = self.v_proj.forward(x)?;
+
+        // DEBUG: Trace Input devices
 
         // Shape: [Batch, Seq, Heads * Dim] -> [Batch, Seq, Heads, Dim] -> [Batch, Heads, Seq, Dim]
         let q = q
@@ -168,56 +172,6 @@ impl BitAttention {
         let mut v = v_new
             .reshape((b_sz, seq_len, self.n_kv_heads, self.head_dim))?
             .transpose(1, 2)?;
-
-        // DEBUG: Check devices before RoPE
-        // if q.device().is_cuda() != self.rotary_emb.cos.device().is_cuda() {
-        //     eprintln!("⚠️ [ATTN] Device Mismatch Pre-RoPE! Q: {:?}, RoPE: {:?}", q.device(), self.rotary_emb.cos.device());
-        // }
-
-        // DEBUG: Check devices before RoPE
-        if q.device().is_cuda() != self.rotary_emb.cos_cache.device().is_cuda() {
-            eprintln!(
-                "⚠️ [ATTN] Device Mismatch Pre-RoPE! Q: {:?}, RoPE: {:?}",
-                q.device(),
-                self.rotary_emb.cos_cache.device()
-            );
-        }
-
-        // DEBUG: Check devices before RoPE
-        if q.device().is_cuda() != self.rotary_emb.cos_cache.device().is_cuda() {
-            eprintln!(
-                "⚠️ [ATTN] Device Mismatch Pre-RoPE! Q: {:?}, RoPE: {:?}",
-                q.device(),
-                self.rotary_emb.cos_cache.device()
-            );
-        }
-
-        // DEBUG: Check devices before RoPE
-        if q.device().is_cuda() != self.rotary_emb.cos_cache.device().is_cuda() {
-            eprintln!(
-                "⚠️ [ATTN] Device Mismatch Pre-RoPE! Q: {:?}, RoPE: {:?}",
-                q.device(),
-                self.rotary_emb.cos_cache.device()
-            );
-        }
-
-        // DEBUG: Check devices before RoPE
-        if q.device().is_cuda() != self.rotary_emb.cos_cache.device().is_cuda() {
-            eprintln!(
-                "⚠️ [ATTN] Device Mismatch Pre-RoPE! Q: {:?}, RoPE: {:?}",
-                q.device(),
-                self.rotary_emb.cos_cache.device()
-            );
-        }
-
-        // DEBUG: Check devices before RoPE
-        if q.device().is_cuda() != self.rotary_emb.cos_cache.device().is_cuda() {
-            eprintln!(
-                "⚠️ [ATTN] Device Mismatch Pre-RoPE! Q: {:?}, RoPE: {:?}",
-                q.device(),
-                self.rotary_emb.cos_cache.device()
-            );
-        }
 
         // Apply RoPE to new Q and new K
         // q: [batch, heads, seq_len, dim] -> rotated at pos..pos+seq_len
@@ -235,6 +189,9 @@ impl BitAttention {
             k = k_out;
             v = v_out;
         }
+
+        // DEBUG: Check K/V devices post-cache
+
         // If no cache (e.g. initial prefill without persistent state?), we use k, v as is.
 
         // GQA handling: Repeat K/V if n_kv_heads < n_heads

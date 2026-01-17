@@ -25,6 +25,12 @@ pub struct BitLlama {
     pub current_pos: usize,
     #[allow(dead_code)]
     pub config: BitLlamaConfig,
+    /// GPU device used for layers 0..n_gpu_layers (None if CPU-only mode)
+    pub gpu_device: Option<Device>,
+    /// CPU device for layers n_gpu_layers..num_layers and lm_head (if lm_head_cpu=true)
+    pub cpu_device: Device,
+    /// Number of layers on GPU (from config.n_gpu_layers)
+    pub n_gpu: usize,
 }
 
 impl BitLlama {
@@ -145,6 +151,9 @@ impl BitLlama {
             ],
             current_pos: 0,
             config: cfg,
+            gpu_device: if n_gpu > 0 { Some(main_device) } else { None },
+            cpu_device,
+            n_gpu,
         })
     }
 
@@ -179,6 +188,16 @@ impl BitLlama {
 
     /// Forward for single token (inference)
     #[allow(dead_code)]
+    /// Main forward pass (dispatches to chunkwise or one)
+    pub fn forward(&mut self, x: &Tensor, w_states: &mut [Tensor]) -> Result<Tensor> {
+        let (_b, seq_len) = x.dims2()?;
+        if seq_len > 1 {
+            self.forward_chunkwise(x, w_states, seq_len)
+        } else {
+            self.forward_one(x, w_states)
+        }
+    }
+
     pub fn forward_one(&mut self, x: &Tensor, w_states: &mut [Tensor]) -> Result<Tensor> {
         // Ensure input is [Batch, Seq] -> [1, 1] if single token
         let x = if x.rank() == 1 {
@@ -189,32 +208,30 @@ impl BitLlama {
         let mut h = self.embedding.forward(&x)?;
 
         for (i, layer) in self.layers.iter().enumerate() {
-            // [Hybrid Fix] Ensure input is on the same device as the layer
-            let layer_device = layer.device();
+            // [Hybrid Fix] Select device based on layer index and stored devices
+            // Layers 0..n_gpu should be on GPU, layers n_gpu.. should be on CPU
+            let target_device: &Device = if i < self.n_gpu {
+                self.gpu_device.as_ref().unwrap_or(&self.cpu_device)
+            } else {
+                &self.cpu_device
+            };
 
-            // DEBUG: Trace device transition
-            // if i == 0 || i == 9 || i == 10 || i == 31 {
-            //      eprintln!("🔍 [Layer {}] Input: {:?}, Target: {:?}", i, h.device(), layer_device);
-            // }
-
-            let h_layer = if h.device().same_device(layer_device) {
+            // Move hidden state to target device
+            let h_layer = if h.device().same_device(target_device) {
                 h.clone()
             } else {
-                eprintln!(
-                    "🚀 [Layer {}] Moving tensor {:?} -> {:?}",
-                    i,
-                    h.device(),
-                    layer_device
-                );
-                let h_moved = h.to_device(layer_device)?;
-                eprintln!("✅ [Layer {}] Moved result: {:?}", i, h_moved.device());
-                if i == 10 && !h_moved.device().is_cpu() {
-                    panic!(
-                        "⛔ FATAL: Failed to move input to CPU! Got: {:?}",
-                        h_moved.device()
+                // Log device transition only at boundary (Layer n_gpu)
+                if i == self.n_gpu {
+                    /*
+                    eprintln!(
+                        "🚀 [Layer {}] Moving tensor {:?} -> {:?}",
+                        i,
+                        h.device(),
+                        target_device
                     );
+                    */
                 }
-                h_moved
+                h.to_device(target_device)?
             };
 
             // Pass KV Cache and Position
@@ -237,6 +254,15 @@ impl BitLlama {
         };
 
         let h_norm = self.norm.forward(&h)?;
+
+        // [Hybrid Fix] Ensure input to lm_head is on correct device (may be CPU when lm_head_cpu=true)
+        let lm_head_device = self.lm_head.weight().device();
+        let h_norm = if h_norm.device().same_device(lm_head_device) {
+            h_norm
+        } else {
+            h_norm.to_device(lm_head_device)?
+        };
+
         let logits = self.lm_head.forward(&h_norm)?;
 
         // Advance Position
@@ -263,7 +289,24 @@ impl BitLlama {
             h = h_new;
         }
 
+        // [Hybrid Fix] Ensure input to Final Norm is on the correct device
+        let norm_device = self.norm.weight.device();
+        let h = if h.device().same_device(norm_device) {
+            h
+        } else {
+            h.to_device(norm_device)?
+        };
+
         let h_norm = self.norm.forward(&h)?;
+
+        // [Hybrid Fix] Ensure input to lm_head is on correct device (may be CPU when lm_head_cpu=true)
+        let lm_head_device = self.lm_head.weight().device();
+        let h_norm = if h_norm.device().same_device(lm_head_device) {
+            h_norm
+        } else {
+            h_norm.to_device(lm_head_device)?
+        };
+
         let logits = self.lm_head.forward(&h_norm)?;
         Ok(logits)
     }
@@ -384,9 +427,15 @@ impl Llama {
         })
     }
 
-    /// Load model automatically from directory
-    pub fn load_auto<P: AsRef<Path>>(dir: P) -> Result<Self> {
-        let dir = dir.as_ref();
+    /// Load model automatically from directory (or file path)
+    pub fn load_auto<P: AsRef<Path>>(input_path: P) -> Result<Self> {
+        let path = input_path.as_ref();
+        let dir = if path.is_file() {
+            path.parent().unwrap_or(path)
+        } else {
+            path
+        };
+
         let config_path = dir.join("config.json");
         let tokenizer_path = dir.join("tokenizer.json");
 

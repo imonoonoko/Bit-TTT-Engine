@@ -1,7 +1,7 @@
 //! Python Bindings for BitLlama (PyO3)
 
 #[cfg(feature = "python")]
-use candle_core::{DType, Tensor, Var};
+use candle_core::{DType, IndexOp, Tensor, Var};
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -115,11 +115,36 @@ impl PyBitLlama {
             let device = self.inner.embedding.embeddings().device().clone();
             let mut current_tokens = start_tokens.clone();
 
-            for _ in 0..max_new_tokens {
-                let last_token = *current_tokens
-                    .last()
-                    .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Empty start tokens"))?;
+            // 1. Prefill
+            let input = Tensor::new(start_tokens.as_slice(), &device)
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?
+                .unsqueeze(0) // Batch size 1
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
+            let logits = self
+                .inner
+                .forward(&input, &mut self.w_states)
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+            // Sample first token from last position
+            let (_b, seq_len, _v) = logits
+                .dims3()
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            let last_logits = logits
+                .i((0, seq_len - 1))
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+            let next_token = last_logits
+                .argmax(0)
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?
+                .to_scalar::<u32>()
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+            current_tokens.push(next_token);
+
+            // 2. Decode Loop
+            for _ in 1..max_new_tokens {
+                let last_token = *current_tokens.last().unwrap();
                 let input = Tensor::new(&[last_token], &device)
                     .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
@@ -131,7 +156,7 @@ impl PyBitLlama {
                 let logits_v = logits
                     .flatten_all()
                     .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-                // Argmax for simplicity in this MVP
+
                 let next_token = logits_v
                     .argmax(0)
                     .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?

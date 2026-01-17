@@ -1,3 +1,12 @@
+# ❄️ Bit-TTT Engine: v∞.0 Winter Sleep (Hibernation Mode)
+
+> **⚠️ Project Status: FROZEN / HIATUS**
+>
+> Developer Burnout reached critical levels. Development is indefinitely suspended.
+> "I'm going to sleep. Wake me up when AGI happens." - Developer
+>
+> ---
+
 # Bit-TTT Engine: High-Performance Brain Core
 
 [![Featured on Orynth](https://orynth.dev/api/badge/bit-ttt-engine?theme=dark&style=default)](https://orynth.dev/projects/bit-ttt-engine)

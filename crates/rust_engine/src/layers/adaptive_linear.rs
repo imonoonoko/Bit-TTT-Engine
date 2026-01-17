@@ -1,114 +1,120 @@
-//! AdaptiveBitLinear - Multi-Base Quantized Linear Layer
-//!
-//! Supports:
-//! 1. Legacy BitNet (1 base, separate weights) - via backward compatibility
-//! 2. Adaptive BitNet (N bases, interleaved packed weights) - "The Fused Path"
+//! AdaptiveBitLinear - Optimized Loading with Rayon & LUT
 
-#[allow(unused_imports)]
-use super::{BitLinear, TensorExt};
+use super::BitLinear;
 use candle_core::{Device, Result, Tensor};
 use candle_nn::VarBuilder;
+use rayon::prelude::*; // 並列処理用
 
-/// Adaptive 1.58-bit Linear Layer
-/// Can hold either a single Legacy BitLinear OR a Pre-reconstructed Weight Matrix.
+// 🔥 高速化の要: 0-255 のバイト値を 4つのf32値に変換する「カンニングペーパー」
+// 計算を一切せず、メモリから値を拾うだけにします。
+static UNPACK_LUT: [[f32; 4]; 256] = {
+    let mut table = [[0.0; 4]; 256];
+    let mut i = 0;
+    while i < 256 {
+        let byte = i as u8;
+        let mut j = 0;
+        while j < 4 {
+            // 2bit: 00=0, 01=1, 10=-1, 11=0
+            let val = (byte >> (j * 2)) & 0b11;
+            table[i][j] = match val {
+                1 => 1.0,
+                2 => -1.0,
+                _ => 0.0,
+            };
+            j += 1;
+        }
+        i += 1;
+    }
+    table
+};
+
 #[derive(Clone)]
 pub struct AdaptiveBitLinear {
-    /// Legacy Single-Base mode (for backward compat or N=1)
     pub legacy_linear: Option<BitLinear>,
-
-    /// Pre-reconstructed weight matrix [Out, In] (F32)
-    /// Computed at load time from packed weights + scales
     pub reconstructed_weight: Option<Tensor>,
-
     pub in_features: usize,
     pub out_features: usize,
 }
 
 impl AdaptiveBitLinear {
     pub fn load(in_dim: usize, out_dim: usize, vb: VarBuilder, device: &Device) -> Result<Self> {
-        // 1. Try Loading Adaptive Format (Detect NumBases via scales)
-        for nb in 1..=8 {
-            if let Ok(scales) = vb.get((nb,), "scales") {
-                // Found scales with dimension 'nb'.
-                let num_bases = nb;
+        // 1. レガシー (BitNet) の確認
+        if let Ok(linear) = BitLinear::load(in_dim, out_dim, vb.clone(), device) {
+            return Ok(Self {
+                legacy_linear: Some(linear),
+                reconstructed_weight: None,
+                in_features: in_dim,
+                out_features: out_dim,
+            });
+        }
 
-                // DEBUG info
-                eprintln!(
-                    "🔥 [ADAPTIVE] Loading layer: in={}, out={}, bases={}, device={:?}",
-                    in_dim, out_dim, num_bases, device
-                );
-                let packed = match vb.get((out_dim, in_dim / 4, num_bases), "weight_packed") {
-                    Ok(p) => p,
-                    Err(e) => {
-                        eprintln!("❌ Failed to load packed weights: {:?}", e);
-                        return Err(e);
-                    }
-                };
+        // 2. Adaptive Format (Bit-TTT) のロード
+        for num_bases in 1..=8 {
+            if let Ok(scales) = vb.get((num_bases,), "scales") {
+                let packed = vb.get((out_dim, in_dim / 4, num_bases), "weight_packed")?;
 
-                // --- Pre-compute reconstructed weights at load time ---
-                // This uses the verified logic from debug_reconstruct.rs
-
+                // CPUに一度持ってくる
                 let packed_cpu = packed.to_device(&Device::Cpu)?;
                 let scales_cpu = scales.to_device(&Device::Cpu)?;
 
-                let mut w_recon =
-                    Tensor::zeros((out_dim, in_dim), candle_core::DType::F32, &Device::Cpu)?;
+                eprintln!(
+                    "🚀 [FAST-LOAD] Loading layer: {}x{} (bases={})",
+                    in_dim, out_dim, num_bases
+                );
 
-                for base in 0..num_bases {
-                    // Python: w_packed[:, :, base, :]
-                    // Rust: narrow(2, base, 1) -> squeeze(2) -> [Out, In/4, 4]
-                    let base_packed = packed_cpu.narrow(2, base, 1)?.squeeze(2)?;
-
-                    // Unpack 2-bit values
-                    // 0 -> 00 -> 0
-                    // 1 -> 01 -> 1
-                    // 2 -> 10 -> -1
-                    // 3 -> 11 -> 0 (padding/unused)
-                    let vec = base_packed.flatten_all()?.to_vec1::<f32>()?;
-                    let mut mapped: Vec<f32> = Vec::with_capacity(vec.len() * 4);
-
-                    for &v_float in &vec {
-                        let v = v_float as u8; // Convert back to u8 (safe since load was U8)
-
-                        for i in 0..4 {
-                            let shift = i * 2;
-                            let val = (v >> shift) & 0x03;
-                            let float_val = match val {
-                                1 => 1.0,
-                                2 => -1.0,
-                                _ => 0.0,
-                            };
-                            mapped.push(float_val);
-                        }
+                // 生データを取得 (Type agnostic handling)
+                let packed_dtype = packed_cpu.dtype();
+                let packed_vec = match packed_dtype {
+                    candle_core::DType::U8 => packed_cpu.flatten_all()?.to_vec1::<u8>()?,
+                    candle_core::DType::F32 => {
+                        eprintln!("⚠️ [FAST-LOAD] Converting F32 packed weights to U8 (Legacy Model Format)");
+                        // Use Candle's native cast (optimized)
+                        packed_cpu
+                            .to_dtype(candle_core::DType::U8)?
+                            .flatten_all()?
+                            .to_vec1::<u8>()?
                     }
+                    _ => {
+                        candle_core::bail!("Unexpected dtype for weight_packed: {:?}", packed_dtype)
+                    }
+                };
 
-                    let base_tensor = Tensor::from_vec(mapped, (out_dim, in_dim), &Device::Cpu)?;
+                let scales_vec = scales_cpu.to_vec1::<f32>()?;
 
-                    // w_recon += base_tensor * scale
-                    let scale_val = scales_cpu.get(base)?.to_scalar::<f32>()?;
-                    w_recon = (w_recon + (base_tensor * scale_val as f64)?)?;
-                }
+                // 🚀 【ここが高速化の核心】
+                // Rayonを使って「行ごと」に並列処理で解凍・再構築する
+                let packed_row_stride = (in_dim / 4) * num_bases;
 
-                // Move to target device
-                let w_recon = w_recon.to_device(device)?;
+                let rows: Vec<Vec<f32>> = (0..out_dim)
+                    .into_par_iter()
+                    .map(|row_idx| {
+                        let mut row_w = vec![0.0f32; in_dim];
+                        let row_start = row_idx * packed_row_stride;
 
-                // DEBUG: Print stats for first MLP layer to verify reconstruction
-                if out_dim == 5632 && in_dim == 2048 {
-                    let w_vec = w_recon
-                        .to_device(&Device::Cpu)?
-                        .flatten_all()?
-                        .to_vec1::<f32>()?;
-                    let first_10: Vec<f32> = w_vec.iter().take(10).cloned().collect();
-                    let sum: f32 = w_vec.iter().sum();
-                    let mean = sum / w_vec.len() as f32;
-                    let variance: f32 =
-                        w_vec.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / w_vec.len() as f32;
-                    let std = variance.sqrt();
-                    eprintln!(
-                        "📊 [VERIFY] gate_proj recon: first10={:?}, std={:.6} (expected ~0.013)",
-                        first_10, std
-                    );
-                }
+                        for base in 0..num_bases {
+                            let scale = scales_vec[base];
+
+                            for col_pack in 0..(in_dim / 4) {
+                                // LUTを使って一瞬で値を取得
+                                let flat_idx = row_start + (col_pack * num_bases) + base;
+                                let byte_val = packed_vec[flat_idx];
+                                let vals = UNPACK_LUT[byte_val as usize];
+
+                                // 加算
+                                let out_col_base = col_pack * 4;
+                                row_w[out_col_base + 0] += vals[0] * scale;
+                                row_w[out_col_base + 1] += vals[1] * scale;
+                                row_w[out_col_base + 2] += vals[2] * scale;
+                                row_w[out_col_base + 3] += vals[3] * scale;
+                            }
+                        }
+                        row_w
+                    })
+                    .collect();
+
+                // 結合してTensor化
+                let final_flat: Vec<f32> = rows.into_iter().flatten().collect();
+                let w_recon = Tensor::from_vec(final_flat, (out_dim, in_dim), device)?;
 
                 return Ok(Self {
                     legacy_linear: None,
@@ -119,28 +125,15 @@ impl AdaptiveBitLinear {
             }
         }
 
-        // 2. Fallback to Legacy BitLinear
-        // This expects "weight" to exist.
-        match BitLinear::load(in_dim, out_dim, vb.clone(), device) {
-            Ok(linear) => Ok(Self {
-                legacy_linear: Some(linear),
-                reconstructed_weight: None,
-                in_features: in_dim,
-                out_features: out_dim,
-            }),
-            Err(e) => Err(e), // Propagate error if neither found
-        }
+        candle_core::bail!("Failed to load layer: neither legacy nor adaptive weights found")
     }
 
     pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        // 1. Legacy Path
         if let Some(linear) = &self.legacy_linear {
             return linear.forward(x);
         }
-
-        // 2. Adaptive Path (using pre-computed weight matrix)
         if let Some(w_recon) = &self.reconstructed_weight {
-            // Handle Rank 3 input: [Batch, Seq, In] -> [Batch*Seq, In]
+            // 入力次元の調整 [Batch, Seq, In] -> [Batch*Seq, In]
             let (x_flat, original_shape) = if x.rank() == 3 {
                 let (b, s, _) = x.dims3()?;
                 (x.flatten(0, 1)?, Some((b, s)))
@@ -148,37 +141,29 @@ impl AdaptiveBitLinear {
                 (x.clone(), None)
             };
 
-            // [Hybrid Guard] Ensure weight is on same device as input
+            // デバイス整合性チェックと移動
             let w = if w_recon.device().same_device(x_flat.device()) {
                 w_recon.clone()
             } else {
-                eprintln!(
-                    "⚠️ [ADAPTIVE] Moving weight {:?} -> {:?}",
-                    w_recon.device(),
-                    x_flat.device()
-                );
+                // ここで転送ログを出すとうるさいので、必要な時だけにする
                 w_recon.to_device(x_flat.device())?
             };
 
-            // Matmul: [Batch*Seq, In] x [In, Out] = [Batch*Seq, Out]
             let result = x_flat.matmul(&w.t()?)?;
 
-            // Reshape back if needed
             if let Some((b, s)) = original_shape {
                 let (_, out_d) = result.dims2()?;
                 return result.reshape((b, s, out_d));
             }
             return Ok(result);
         }
-
-        candle_core::bail!("AdaptiveBitLinear: Invalid State (No weights loaded)")
+        candle_core::bail!("AdaptiveBitLinear: Invalid State")
     }
 
     pub fn precompute_packed(&mut self) -> Result<()> {
         if let Some(linear) = &mut self.legacy_linear {
             linear.precompute_packed()?;
         }
-        // Adaptive weights are already reconstructed at load time.
         Ok(())
     }
 }
