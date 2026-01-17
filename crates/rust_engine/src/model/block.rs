@@ -11,7 +11,7 @@ const RMS_NORM_EPS: f64 = 1e-5;
 
 /// Enum to dispatch between TTT and Attention layers
 pub enum LayerDispatch {
-    TTT(TTTLayer),
+    TTT(Box<TTTLayer>),
     Attention(Box<crate::layers::BitAttention>),
 }
 
@@ -47,7 +47,7 @@ impl BitLlamaBlock {
         let core = match cfg.arch {
             ModelArch::TTT => {
                 let ttt = TTTLayer::load(dim, cfg.inner_lr, vb.pp("ttt"), device)?;
-                LayerDispatch::TTT(ttt)
+                LayerDispatch::TTT(Box::new(ttt))
             }
             ModelArch::Llama => {
                 let attn = crate::layers::BitAttention::load(

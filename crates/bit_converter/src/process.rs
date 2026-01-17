@@ -105,12 +105,10 @@ impl ProcessManager {
                     let tx_out = tx.clone();
                     thread::spawn(move || {
                         let reader = BufReader::new(stdout);
-                        for line in reader.lines() {
-                            if let Ok(l) = line {
-                                // Parse Progress (tqdm)
-                                // tqdm usually prints to stderr, but we check both.
-                                tx_out.send(ProcessEvent::Log(l)).unwrap();
-                            }
+                        for l in reader.lines().map_while(Result::ok) {
+                            // Parse Progress (tqdm)
+                            // tqdm usually prints to stderr, but we check both.
+                            tx_out.send(ProcessEvent::Log(l)).unwrap();
                         }
                     });
 
@@ -119,19 +117,17 @@ impl ProcessManager {
                     let tx_err = tx.clone();
                     thread::spawn(move || {
                         let reader = BufReader::new(stderr);
-                        for line in reader.lines() {
-                            if let Ok(l) = line {
-                                // Try verify tqdm text like "10%|...|"
-                                if l.contains("%|") {
-                                    // Hacky parse
-                                    // 10%|###   |
-                                    tx_err
-                                        .send(ProcessEvent::Log(format!("[Progress] {}", l)))
-                                        .unwrap();
-                                    // Parse percentage logic here if needed
-                                } else {
-                                    tx_err.send(ProcessEvent::Log(l)).unwrap();
-                                }
+                        for l in reader.lines().map_while(Result::ok) {
+                            // Try verify tqdm text like "10%|...|"
+                            if l.contains("%|") {
+                                // Hacky parse
+                                // 10%|###   |
+                                tx_err
+                                    .send(ProcessEvent::Log(format!("[Progress] {}", l)))
+                                    .unwrap();
+                                // Parse percentage logic here if needed
+                            } else {
+                                tx_err.send(ProcessEvent::Log(l)).unwrap();
                             }
                         }
                     });

@@ -145,6 +145,7 @@ impl eframe::App for BitConverterApp {
             ui.add_space(5.0);
 
             // Input / Output Section
+            #[allow(clippy::collapsible_if)]
             ui.group(|ui| {
                 ui.heading("📂 Paths");
                 ui.horizontal(|ui| {
