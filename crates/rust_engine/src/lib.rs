@@ -15,7 +15,7 @@ pub mod python;
 
 // Primary public API re-exports
 pub use layers::{BitLinear, RMSNorm, SwiGLU, TTTLayer};
-pub use model::{BitLlama, BitLlamaBlock, BitLlamaConfig, Llama};
+pub use model::{BitLlama, BitLlamaBlock, BitLlamaConfig, LayerDispatch, Llama, ModelArch};
 
 // Alias for backward compatibility
 pub use model::TTTLayer as CandleTTTLayer;
@@ -27,8 +27,13 @@ use pyo3::prelude::*;
 #[cfg(feature = "python")]
 #[pymodule]
 fn cortex_rust(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_class::<model::ModelArch>()?;
     m.add_class::<model::BitLlamaConfig>()?;
     m.add_class::<python::PyBitLlama>()?;
     m.add_class::<python::PyTrainer>()?;
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/attention_test.rs"]
+mod attention_test;

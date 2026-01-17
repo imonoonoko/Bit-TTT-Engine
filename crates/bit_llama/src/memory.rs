@@ -89,7 +89,7 @@ impl MemorySystem {
                     batch_text.push_str(&entry.text);
                 }
             }
-            batch_text.push_str("\n");
+            batch_text.push('\n');
         }
 
         Ok(batch_text)

@@ -21,6 +21,9 @@ workspace/
 *.safetensors
 *.bin
 *.u32
+*.pyd
+*.dll
+*.exe
 
 # Ignore all JSONs by default (configs/states/checkpoints/tokenizers in root)
 *.json
@@ -29,6 +32,7 @@ workspace/
 !models/**/*.json
 !crates/bit_llama/data/**/*.json
 !crates/bit_llama/models/**/*.json
+!tools/**/*.json
 
 # User specific
 .env

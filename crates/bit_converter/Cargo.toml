@@ -1,0 +1,15 @@
+[package]
+name = "bit_converter"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.26"
+egui = "0.26"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rfd = "0.12"
+anyhow = "1.0"
+encoding_rs = "0.8"
+image = { version = "0.24", features = ["png"] }
+crossbeam-channel = "0.5" # For reliable channel communication

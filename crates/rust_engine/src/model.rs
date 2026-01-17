@@ -10,8 +10,8 @@ pub mod block;
 pub mod config;
 pub mod llama;
 
-pub use block::BitLlamaBlock;
-pub use config::BitLlamaConfig;
+pub use block::{BitLlamaBlock, LayerDispatch};
+pub use config::{BitLlamaConfig, ModelArch};
 pub use llama::{BitLlama, Llama};
 
 // Re-export TTTLayer for backward compatibility alias

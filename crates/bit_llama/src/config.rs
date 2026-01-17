@@ -50,6 +50,12 @@ pub struct ProjectConfig {
     #[serde(default = "default_max_tokens")]
     pub inference_max_tokens: usize,
 
+    // RoPE / Positional Embeddings
+    #[serde(default = "default_rope")]
+    pub rope_theta: f64,
+    #[serde(default = "default_max_pos")]
+    pub max_position_embeddings: usize,
+
     // Phase 12: MeZO & Instruct
     #[serde(default)]
     pub use_mezo: bool,
@@ -59,6 +65,8 @@ pub struct ProjectConfig {
     pub instruct_path: String,
     #[serde(default, skip)]
     pub mock: bool,
+    #[serde(default)]
+    pub lm_head_cpu: bool,
 }
 
 fn default_input_pattern() -> String {
@@ -78,6 +86,12 @@ fn default_profile() -> String {
 }
 fn default_epsilon() -> f64 {
     1e-3
+}
+fn default_rope() -> f64 {
+    10000.0
+}
+fn default_max_pos() -> usize {
+    2048
 }
 
 impl Default for ProjectConfig {
@@ -110,6 +124,9 @@ impl Default for ProjectConfig {
             epsilon: 1e-3,
             instruct_path: "".to_string(),
             mock: false,
+            rope_theta: default_rope(),
+            max_position_embeddings: default_max_pos(),
+            lm_head_cpu: false, // Default to GPU
         }
     }
 }
@@ -144,16 +161,26 @@ impl ProjectConfig {
             epsilon: args.epsilon,
             instruct_path: "".to_string(),
             mock: args.mock,
+            rope_theta: default_rope(),
+            max_position_embeddings: args.context_len.max(2048),
+            lm_head_cpu: false,
         }
     }
 
     pub fn to_bit_llama_config(&self, inner_lr: f64) -> cortex_rust::BitLlamaConfig {
         cortex_rust::BitLlamaConfig {
+            arch: cortex_rust::ModelArch::TTT, // Default to TTT for trainer for now
             vocab_size: self.vocab_size,
             hidden_dim: self.model_dim,
             num_layers: self.layers,
+            n_heads: self.n_heads,
+            n_kv_heads: self.n_kv_heads.unwrap_or(self.n_heads),
+            intermediate_dim: None,
             inner_lr,
             n_gpu_layers: None,
+            rope_theta: self.rope_theta,
+            max_position_embeddings: self.max_position_embeddings,
+            lm_head_cpu: self.lm_head_cpu,
         }
     }
 

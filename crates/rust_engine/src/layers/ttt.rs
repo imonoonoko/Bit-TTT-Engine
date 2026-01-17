@@ -3,7 +3,7 @@
 use candle_core::{Result, Tensor};
 use candle_nn::VarBuilder;
 
-use super::BitLinear;
+use super::AdaptiveBitLinear;
 
 /// Epsilon for TTT layer normalization
 const TTT_NORM_EPS: f32 = 1e-6;
@@ -14,8 +14,8 @@ pub struct TTTLayer {
     pub hidden_dim: usize,
     #[allow(dead_code)]
     pub d_small: usize,
-    pub proj_down: BitLinear,
-    pub proj_up: BitLinear,
+    pub proj_down: AdaptiveBitLinear,
+    pub proj_up: AdaptiveBitLinear,
     pub inner_lr: f64,
 }
 
@@ -30,8 +30,8 @@ impl TTTLayer {
         Ok(Self {
             hidden_dim,
             d_small,
-            proj_down: BitLinear::load(hidden_dim, d_small, vb.pp("down"), device)?,
-            proj_up: BitLinear::load(d_small, hidden_dim, vb.pp("up"), device)?,
+            proj_down: AdaptiveBitLinear::load(hidden_dim, d_small, vb.pp("down"), device)?,
+            proj_up: AdaptiveBitLinear::load(d_small, hidden_dim, vb.pp("up"), device)?,
             inner_lr,
         })
     }

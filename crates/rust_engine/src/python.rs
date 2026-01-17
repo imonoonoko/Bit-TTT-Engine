@@ -31,7 +31,7 @@ impl PyBitLlama {
         checkpoint_path: &str,
         device: Option<&str>,
     ) -> PyResult<Self> {
-        let device = match device {
+        let _device = match device {
             Some("cuda") => candle_core::Device::new_cuda(0).map_err(|e| {
                 pyo3::exceptions::PyValueError::new_err(format!("CUDA error: {}", e))
             })?,
@@ -44,9 +44,15 @@ impl PyBitLlama {
             }
         };
 
+        // Always load to CPU first, then selectively move to GPU in llama.rs
+        // This enables hybrid offloading (n_gpu_layers)
         let vb = unsafe {
-            candle_nn::VarBuilder::from_mmaped_safetensors(&[checkpoint_path], DType::F32, &device)
-                .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
+            candle_nn::VarBuilder::from_mmaped_safetensors(
+                &[checkpoint_path],
+                DType::F32,
+                &candle_core::Device::Cpu,
+            )
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
         };
 
         let mut model = BitLlama::load(config, vb)
@@ -56,10 +62,12 @@ impl PyBitLlama {
             .precompute_packed()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
+        // w_states should match each layer's device for Hybrid Offloading
         let d_small = config.hidden_dim / 4;
         let mut w_states = Vec::new();
-        for _ in 0..config.num_layers {
-            let w = Tensor::zeros((d_small, d_small), DType::F32, &device)
+        for layer in &model.layers {
+            let layer_device = layer.device();
+            let w = Tensor::zeros((d_small, d_small), DType::F32, layer_device)
                 .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
             w_states.push(w);
         }
@@ -81,7 +89,7 @@ impl PyBitLlama {
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         let logits_vec = logits
-            .squeeze(0)
+            .flatten_all()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?
             .to_vec1::<f32>()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
@@ -104,7 +112,7 @@ impl PyBitLlama {
         max_new_tokens: usize,
     ) -> PyResult<Vec<u32>> {
         py.allow_threads(move || {
-            let device = self.inner.embedding.embeddings().device();
+            let device = self.inner.embedding.embeddings().device().clone();
             let mut current_tokens = start_tokens.clone();
 
             for _ in 0..max_new_tokens {
@@ -112,7 +120,7 @@ impl PyBitLlama {
                     .last()
                     .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Empty start tokens"))?;
 
-                let input = Tensor::new(&[last_token], device)
+                let input = Tensor::new(&[last_token], &device)
                     .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
                 let logits = self
@@ -121,7 +129,7 @@ impl PyBitLlama {
                     .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
                 let logits_v = logits
-                    .squeeze(0)
+                    .flatten_all()
                     .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
                 // Argmax for simplicity in this MVP
                 let next_token = logits_v

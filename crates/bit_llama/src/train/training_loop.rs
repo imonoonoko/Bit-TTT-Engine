@@ -196,7 +196,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
 
     let mut loader = BitLoader::new(&loader_path)?;
     info!("Data Loaded. Total tokens: {}", loader.data_len);
-    if let Some(_) = loader.mask_mmap {
+    if loader.mask_mmap.is_some() {
         info!("✅ Mask file detected and loaded.");
     }
 
@@ -212,7 +212,7 @@ pub fn run(args: TrainArgs) -> Result<()> {
 
     let mut varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
-    let model = BitLlama::load(config.clone(), vb)?;
+    let model = BitLlama::load(config, vb)?;
 
     let base_dir = if Path::new("bit_llama_checkpoint.safetensors").exists() {
         "".to_string()

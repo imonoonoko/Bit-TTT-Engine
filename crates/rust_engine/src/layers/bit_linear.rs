@@ -7,7 +7,9 @@ use super::TensorExt;
 use crate::kernels::packing::PackedTensor;
 use crate::kernels::{cpu::BitLinearCpu, cuda::BitLinearCuda};
 
-/// 1.58-bit quantized linear layer with STE (Straight-Through Estimator)
+/// 1.58-bit/// Standard BitLinear layer (1.58-bit)
+/// Optimized for inference with pre-packed weights.
+#[derive(Clone)]
 pub struct BitLinear {
     pub weight: Tensor,
     #[allow(dead_code)]
@@ -21,9 +23,15 @@ pub struct BitLinear {
 impl BitLinear {
     pub fn load(in_dim: usize, out_dim: usize, vb: VarBuilder, device: &Device) -> Result<Self> {
         let init = candle_nn::init::DEFAULT_KAIMING_NORMAL;
-        let weight = vb
-            .get_with_hints((out_dim, in_dim), "weight", init)?
-            .to_device(device)?;
+        let weight = vb.get_with_hints((out_dim, in_dim), "weight", init)?;
+
+        // [Plan B] Explicit Mmap Detachment
+        let weight = if device.is_cpu() {
+            let data = weight.to_vec1::<f32>()?;
+            Tensor::from_vec(data, weight.shape(), device)?
+        } else {
+            weight.to_device(device)?
+        };
         Ok(Self {
             weight,
             in_features: in_dim,

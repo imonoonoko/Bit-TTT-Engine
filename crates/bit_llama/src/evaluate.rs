@@ -1,5 +1,5 @@
 use anyhow::Result;
-use candle_core::{DType, Tensor};
+use candle_core::Tensor;
 use clap::Args;
 use cortex_rust::Llama;
 // use memmap2::MmapOptions; // Removed
@@ -45,8 +45,8 @@ pub fn run(args: EvaluateArgs) -> Result<()> {
     let mut total_tokens = 0;
     let mut batch_count = 0;
 
-    let d_small = llama.model.config.hidden_dim / 4;
-    let num_layers = llama.model.config.num_layers;
+    let _d_small = llama.model.config.hidden_dim / 4;
+    let _num_layers = llama.model.config.num_layers;
 
     info!("Starting Evaluation...");
 
@@ -64,14 +64,10 @@ pub fn run(args: EvaluateArgs) -> Result<()> {
                 // "Current TTT impl in loop is explicit content from original."
 
                 for b in 0..b_sz {
-                    let mut w_states = Vec::new();
-                    for _ in 0..num_layers {
-                        w_states.push(Tensor::zeros(
-                            (d_small, d_small),
-                            DType::F32,
-                            &llama.device,
-                        )?);
-                    }
+                    let mut w_states = llama.model.new_w_states();
+
+                    // Reset KV Cache and Position for new sequence
+                    llama.model.reset_kv_cache();
 
                     let mut batch_nll = 0.0;
 
@@ -81,10 +77,26 @@ pub fn run(args: EvaluateArgs) -> Result<()> {
 
                         let inp_t = Tensor::new(&[token_id], &llama.device)?;
                         let logits = llama.model.forward_one(&inp_t, &mut w_states)?;
+                        if b == 0 && t == 0 {
+                            eprintln!(
+                                "🚀 [DEBUG] Starting loop. Logits shape: {:?}",
+                                logits.shape()
+                            );
+                        }
+
+                        if b == 0 && t < 3 {
+                            // Safe print attempt
+                            // let l_vec = logits.to_vec2::<f32>()?;
+                            // eprintln!("🔍 [LOGITS] t={}: {:?}", t, &l_vec[0][..10]);
+                        }
 
                         let tgt_t = Tensor::new(&[target_id as i64], &llama.device)?;
-                        let logits_b = logits.unsqueeze(0)?;
-                        let loss = candle_nn::loss::cross_entropy(&logits_b, &tgt_t)?;
+
+                        // Let's just reshape explicitly to be safe.
+                        let (_b, _s, vocab) = logits.dims3()?;
+                        let logits_2d = logits.reshape((1, vocab))?;
+
+                        let loss = candle_nn::loss::cross_entropy(&logits_2d, &tgt_t)?;
                         batch_nll += loss.to_scalar::<f32>()?;
                     }
 

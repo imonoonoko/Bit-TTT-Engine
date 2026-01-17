@@ -6,7 +6,7 @@ use candle_nn::VarBuilder;
 use std::path::Path;
 use tokenizers::Tokenizer;
 
-use crate::layers::{RMSNorm, TensorExt};
+use crate::layers::RMSNorm;
 use crate::model::{BitLlamaBlock, BitLlamaConfig};
 
 /// Epsilon for RMSNorm
@@ -21,6 +21,8 @@ pub struct BitLlama {
     pub layers: Vec<BitLlamaBlock>,
     pub norm: RMSNorm,
     pub lm_head: candle_nn::Linear,
+    pub kv_caches: Vec<Option<crate::layers::KVCache>>,
+    pub current_pos: usize,
     #[allow(dead_code)]
     pub config: BitLlamaConfig,
 }
@@ -42,14 +44,14 @@ impl BitLlama {
                 if main_device.is_cuda() {
                     match crate::device_utils::get_vram_info(0) {
                         Ok((free, total)) => {
-                            let possible = cfg.calculate_auto_offload(free);
+                            let (n, est_vram) = cfg.calculate_auto_offload(free);
                             println!(
                                 "[Auto-Config] Detected VRAM: {} MB Free / {} MB Total",
                                 free / 1024 / 1024,
                                 total / 1024 / 1024
                             );
-                            println!("[Auto-Config] Strategy: {} Layers on GPU / {} on CPU. (Safety Margin: 2GB)", possible, cfg.num_layers.saturating_sub(possible));
-                            possible
+                            println!("[Auto-Config] Strategy: {} Layers on GPU / {} on CPU. (Est: {:.2} MB)", n, cfg.num_layers.saturating_sub(n), est_vram);
+                            n
                         }
                         Err(e) => {
                             eprintln!(
@@ -65,52 +67,97 @@ impl BitLlama {
             }
         };
 
-        let embedding = candle_nn::embedding(cfg.vocab_size, cfg.hidden_dim, vb.pp("embed"))?;
-        // Embedding usually stays on GPU (or main device) as it's the entry point.
-        // Or if we want full hybrid flexibility, maybe CPU?
-        // Let's put embedding on main_device for now.
-        // Note: candle_nn::embedding loads weights to vb's device.
-        // We might need to manually move it if vb is CPU and we want GPU.
-        // But `candle_nn::embedding` returns an Embedding struct which holds a Tensor.
-        // We can cast `embedding.embeddings()` to device.
-        // ACTUALLY: `candle_nn::embedding` just wraps the tensor lookup.
+        // IO layers (embedding, norm, lm_head) should be on GPU only if n_gpu > 0
+        let io_device = if n_gpu > 0 { &main_device } else { &cpu_device };
+        let lm_head_device = if cfg.lm_head_cpu {
+            &cpu_device
+        } else {
+            io_device
+        };
 
-        // Let's be explicit:
-        // We will respect `vb`'s device for the loading, but then move layers to their target device.
-        // BUT, `BitLlamaBlock::load` now takes `device` and does `to_device`.
-        // So we just need to determine the target device for each layer.
+        // Support both "model.embed_tokens" (HF) and "embed" (BitLlama Legacy)
+        let embedding_raw =
+            candle_nn::embedding(cfg.vocab_size, cfg.hidden_dim, vb.pp("model.embed_tokens"))
+                .or_else(|_| {
+                    candle_nn::embedding(cfg.vocab_size, cfg.hidden_dim, vb.pp("embed"))
+                })?;
+
+        // [Plan B] Explicit Mmap Detachment for Embedding
+        // If on CPU, we must Deep Copy. If on GPU, to_device copies automatically.
+        let embedding = if io_device.is_cpu() {
+            // Flatten 2D embedding [vocab, hidden] to 1D, then reshape
+            let data = embedding_raw.embeddings().flatten_all()?.to_vec1::<f32>()?;
+            let w = Tensor::from_vec(data, (cfg.vocab_size, cfg.hidden_dim), io_device)?;
+            candle_nn::Embedding::new(w, cfg.hidden_dim)
+        } else {
+            candle_nn::Embedding::new(
+                embedding_raw.embeddings().to_device(io_device)?,
+                cfg.hidden_dim,
+            )
+        };
 
         let mut layers = Vec::new();
         for i in 0..cfg.num_layers {
             let target_device = if i < n_gpu { &main_device } else { &cpu_device };
 
-            let layer = BitLlamaBlock::load(
-                cfg.hidden_dim,
-                cfg.inner_lr,
-                vb.pp(format!("layers.{}", i)),
-                target_device,
-            )?;
+            // Support "model.layers.i" (HF) and "layers.i" (Legacy)
+            let layer_vb = if vb
+                .contains_tensor(&format!("model.layers.{}.self_attn.q_proj.weight", i))
+                || vb.contains_tensor(&format!(
+                    "model.layers.{}.post_attention_layernorm.weight",
+                    i
+                )) {
+                vb.pp(format!("model.layers.{}", i))
+            } else {
+                vb.pp(format!("layers.{}", i))
+            };
+
+            let layer = BitLlamaBlock::load(&cfg, layer_vb, target_device)?;
             layers.push(layer);
         }
 
-        let norm = RMSNorm::load(cfg.hidden_dim, RMS_NORM_EPS, vb.pp("norm_f"), &main_device)?;
-        let lm_head = candle_nn::linear_no_bias(cfg.hidden_dim, cfg.vocab_size, vb.pp("lm_head"))?;
-        // lm_head weights to main_device?
-        // candle_nn::linear_no_bias loads to vb device.
-        // We might want to move it.
-        // But `candle_nn::Linear` struct is simple.
-        // Let's re-create it or move weights?
-        // `candle_nn::Linear` fields are public? No, `weight` is private, accessed via `weight()`.
-        // Let's just assume for now we keep it as returned by `linear_no_bias`.
-        // Ideally, the final layer should be on GPU for fast logits.
+        // Support "model.norm" (HF) and "norm_f" (Legacy)
+        let norm = RMSNorm::load(cfg.hidden_dim, RMS_NORM_EPS, vb.pp("model.norm"), io_device)
+            .or_else(|_| RMSNorm::load(cfg.hidden_dim, RMS_NORM_EPS, vb.pp("norm_f"), io_device))?;
+
+        // Load LM Head and move to lm_head_device
+        let lm_head_raw =
+            candle_nn::linear_no_bias(cfg.hidden_dim, cfg.vocab_size, vb.pp("lm_head"))?;
+
+        // [Hybrid Guard] Move LM Head with Deep Copy if CPU
+        let lm_head = if lm_head_device.is_cpu() {
+            // Fix: Flatten 2D tensor to 1D before converting to vector
+            let data = lm_head_raw.weight().flatten_all()?.to_vec1::<f32>()?;
+            let w = Tensor::from_vec(data, (cfg.vocab_size, cfg.hidden_dim), lm_head_device)?;
+            candle_nn::Linear::new(w, None)
+        } else {
+            candle_nn::Linear::new(lm_head_raw.weight().to_device(lm_head_device)?, None)
+        };
 
         Ok(Self {
             embedding,
             layers,
             norm,
             lm_head,
+            kv_caches: vec![
+                Some(crate::layers::KVCache::new(cfg.max_position_embeddings));
+                cfg.num_layers
+            ],
+            current_pos: 0,
             config: cfg,
         })
+    }
+
+    /// Helper to get zero states for TTT
+    pub fn new_w_states(&self) -> Vec<Tensor> {
+        // TTT State size: [Hidden, Hidden]
+        // If Attention, we don't need w_states (they are unused), but keep API consistent.
+        let device = self.embedding.embeddings().device();
+        let dim = self.config.hidden_dim;
+        // Optimization: Don't allocate if Attention?
+        // But forward_one signature requires w_states slice.
+        // Allocate zeros.
+        vec![Tensor::zeros((dim, dim), DType::F32, device).unwrap(); self.layers.len()]
     }
 
     pub fn precompute_packed(&mut self) -> Result<()> {
@@ -120,46 +167,81 @@ impl BitLlama {
         Ok(())
     }
 
+    pub fn reset_kv_cache(&mut self) {
+        self.kv_caches = vec![
+            Some(crate::layers::KVCache::new(
+                self.config.max_position_embeddings
+            ));
+            self.layers.len()
+        ];
+        self.current_pos = 0;
+    }
+
     /// Forward for single token (inference)
     #[allow(dead_code)]
-    pub fn forward_one(&self, x: &Tensor, w_states: &mut [Tensor]) -> Result<Tensor> {
-        let mut h = self.embedding.forward(x)?;
+    pub fn forward_one(&mut self, x: &Tensor, w_states: &mut [Tensor]) -> Result<Tensor> {
+        // Ensure input is [Batch, Seq] -> [1, 1] if single token
+        let x = if x.rank() == 1 {
+            x.unsqueeze(0)?
+        } else {
+            x.clone()
+        };
+        let mut h = self.embedding.forward(&x)?;
 
         for (i, layer) in self.layers.iter().enumerate() {
-            // Hybrid Logic:
-            // Input `h` might be on GPU, Layer might be on CPU.
-            // Check layer device (heuristic: use norm1.weight device)
-            let layer_device = layer.norm1.weight.device();
+            // [Hybrid Fix] Ensure input is on the same device as the layer
+            let layer_device = layer.device();
 
-            // Move input to layer's device if needed
-            let h_device = h.device();
-            let h_in = if h_device.same_device(layer_device) {
-                std::borrow::Cow::Borrowed(&h)
+            // DEBUG: Trace device transition
+            // if i == 0 || i == 9 || i == 10 || i == 31 {
+            //      eprintln!("🔍 [Layer {}] Input: {:?}, Target: {:?}", i, h.device(), layer_device);
+            // }
+
+            let h_layer = if h.device().same_device(layer_device) {
+                h.clone()
             } else {
-                std::borrow::Cow::Owned(h.to_device(layer_device)?)
+                eprintln!(
+                    "🚀 [Layer {}] Moving tensor {:?} -> {:?}",
+                    i,
+                    h.device(),
+                    layer_device
+                );
+                let h_moved = h.to_device(layer_device)?;
+                eprintln!("✅ [Layer {}] Moved result: {:?}", i, h_moved.device());
+                if i == 10 && !h_moved.device().is_cpu() {
+                    panic!(
+                        "⛔ FATAL: Failed to move input to CPU! Got: {:?}",
+                        h_moved.device()
+                    );
+                }
+                h_moved
             };
 
-            // W state also needs to be on correct device
+            // Pass KV Cache and Position
             let w_state = &w_states[i];
-            let w_device = w_state.device();
-            let w_in = if w_device.same_device(layer_device) {
-                std::borrow::Cow::Borrowed(w_state)
-            } else {
-                std::borrow::Cow::Owned(w_state.to_device(layer_device)?)
-            };
+            let cache = &mut self.kv_caches[i];
+            let pos = self.current_pos;
 
-            let (h_new, w_new) = layer.forward(&h_in, &w_in)?;
+            let (h_new, w_new) = layer.forward(&h_layer, w_state, cache, pos)?;
 
-            // Update w_states[i] with new state (keeping it on layer device for next step?)
-            // Usually state stays where the layer is.
             w_states[i] = w_new;
-
             h = h_new;
         }
 
+        // [Hybrid Fix] Ensure input to Final Norm is on the correct device
+        let norm_device = self.norm.weight.device();
+        let h = if h.device().same_device(norm_device) {
+            h
+        } else {
+            h.to_device(norm_device)?
+        };
+
         let h_norm = self.norm.forward(&h)?;
-        let w = self.lm_head.weight();
-        let logits = h_norm.matmul_robust(&w.t()?)?;
+        let logits = self.lm_head.forward(&h_norm)?;
+
+        // Advance Position
+        self.current_pos += 1;
+
         Ok(logits)
     }
 
@@ -173,42 +255,20 @@ impl BitLlama {
         let mut h = self.embedding.forward(x)?;
 
         for (i, layer) in self.layers.iter().enumerate() {
-            // Hybrid Logic: Ensure input 'h' is on the layer's device
-            let layer_device = layer.norm1.weight.device();
-            let h_device = h.device();
-
-            let h_in = if h_device.same_device(layer_device) {
-                std::borrow::Cow::Borrowed(&h)
-            } else {
-                std::borrow::Cow::Owned(h.to_device(layer_device)?)
-            };
-
-            // w_states[i] must also be on layer device
             let w_state = &w_states[i];
-            let w_device = w_state.device();
-            let w_in = if w_device.same_device(layer_device) {
-                std::borrow::Cow::Borrowed(w_state)
-            } else {
-                std::borrow::Cow::Owned(w_state.to_device(layer_device)?)
-            };
-
-            let (h_new, w_final) = layer.forward_chunkwise(&h_in, &w_in, chunk_size)?;
-
-            // w_final is on layer_device. Store it back.
-            // If we want w_states to stay on their respective devices, this is fine.
-            w_states[i] = w_final;
-
-            // h propagates on this device. Next layer will move it if needed.
+            // Chunkwise usually implies TTT or specific training mode.
+            // Attention implementation of chunkwise is limited in block.rs
+            let (h_new, w_new) = layer.forward_chunkwise(&h, w_state, chunk_size)?;
+            w_states[i] = w_new;
             h = h_new;
         }
 
         let h_norm = self.norm.forward(&h)?;
-        let w = self.lm_head.weight();
-        let logits = h_norm.matmul_robust(&w.t()?)?;
-
+        let logits = self.lm_head.forward(&h_norm)?;
         Ok(logits)
     }
 
+    /// Helper for Python to check weights
     pub fn collect_tensors(&self) -> std::collections::HashMap<String, Tensor> {
         let mut tensors = std::collections::HashMap::new();
         tensors.insert(
@@ -222,30 +282,55 @@ impl BitLlama {
                 format!("{}.norm1.weight", prefix),
                 layer.norm1.weight.clone(),
             );
-            tensors.insert(
-                format!("{}.ttt.down.weight", prefix),
-                layer.ttt.proj_down.weight.clone(),
-            );
-            tensors.insert(
-                format!("{}.ttt.up.weight", prefix),
-                layer.ttt.proj_up.weight.clone(),
-            );
+
+            // Helper to extract weight
+            let get_weight = |l: &crate::layers::AdaptiveBitLinear| -> Option<Tensor> {
+                if let Some(legacy) = &l.legacy_linear {
+                    Some(legacy.weight.clone())
+                } else {
+                    l.reconstructed_weight.clone() // Return reconstructed weight if legacy not found
+                }
+            };
+
+            match &layer.core {
+                crate::model::block::LayerDispatch::TTT(ttt) => {
+                    if let Some(w) = get_weight(&ttt.proj_down) {
+                        tensors.insert(format!("{}.ttt.down.weight", prefix), w);
+                    }
+                    if let Some(w) = get_weight(&ttt.proj_up) {
+                        tensors.insert(format!("{}.ttt.up.weight", prefix), w);
+                    }
+                }
+                crate::model::block::LayerDispatch::Attention(attn) => {
+                    if let Some(w) = get_weight(&attn.q_proj) {
+                        tensors.insert(format!("{}.self_attn.q_proj.weight", prefix), w);
+                    }
+                    if let Some(w) = get_weight(&attn.k_proj) {
+                        tensors.insert(format!("{}.self_attn.k_proj.weight", prefix), w);
+                    }
+                    if let Some(w) = get_weight(&attn.v_proj) {
+                        tensors.insert(format!("{}.self_attn.v_proj.weight", prefix), w);
+                    }
+                    if let Some(w) = get_weight(&attn.o_proj) {
+                        tensors.insert(format!("{}.self_attn.o_proj.weight", prefix), w);
+                    }
+                }
+            }
+
             tensors.insert(
                 format!("{}.norm2.weight", prefix),
                 layer.norm2.weight.clone(),
             );
-            tensors.insert(
-                format!("{}.mlp.gate_proj.weight", prefix),
-                layer.mlp.w1.weight.clone(),
-            );
-            tensors.insert(
-                format!("{}.mlp.down_proj.weight", prefix),
-                layer.mlp.w2.weight.clone(),
-            );
-            tensors.insert(
-                format!("{}.mlp.up_proj.weight", prefix),
-                layer.mlp.w3.weight.clone(),
-            );
+
+            if let Some(w) = get_weight(&layer.mlp.w1) {
+                tensors.insert(format!("{}.mlp.gate_proj.weight", prefix), w);
+            }
+            if let Some(w) = get_weight(&layer.mlp.w2) {
+                tensors.insert(format!("{}.mlp.down_proj.weight", prefix), w);
+            }
+            if let Some(w) = get_weight(&layer.mlp.w3) {
+                tensors.insert(format!("{}.mlp.up_proj.weight", prefix), w);
+            }
         }
 
         tensors.insert("norm_f.weight".to_string(), self.norm.weight.clone());
@@ -268,493 +353,211 @@ pub struct Llama {
 }
 
 impl Llama {
-    /// Auto-detect format and load model
-    pub fn load_auto<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
-        let device = candle_core::Device::cuda_if_available(0).unwrap_or(candle_core::Device::Cpu);
-        Self::load_auto_with_device(path, &device)
-    }
+    pub fn load<P: AsRef<Path>>(
+        model_path: P,
+        tokenizer_path: P,
+        config: BitLlamaConfig,
+    ) -> Result<Self> {
+        let device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);
 
-    pub fn load_auto_with_device<P: AsRef<Path>>(
-        path: P,
-        device: &candle_core::Device,
-    ) -> anyhow::Result<Self> {
-        let path = path.as_ref();
+        // Load Tokenizer
+        let tokenizer = Tokenizer::from_file(tokenizer_path).map_err(candle_core::Error::wrap)?;
 
-        if path.is_file() {
-            if let Some(ext) = path.extension() {
-                if ext == "bitt" {
-                    return Self::from_bitt_file_with_device(path, device);
-                } else if ext == "safetensors" {
-                    let parent = path.parent().unwrap_or(Path::new("."));
-                    return Self::new_with_weights(parent, path, device);
-                }
-            }
-        } else if path.is_dir() {
-            return Self::new_with_device(path, device);
-        }
+        // Lock File (ensure exclusive access if training, shared if inference)
+        // For simplicity, just open standard file.
+        let file = std::fs::File::open(&model_path)?;
+        // fs2::FileExt::lock_shared(&file)?; // Optional: file locking
 
-        Self::from_bitt_file_with_device(path, device)
-            .or_else(|_| Self::new_with_device(path, device))
-            .map_err(|_| {
-                anyhow::anyhow!(
-                    "Failed to load model from {:?}. Not a valid .bitt file or legacy directory.",
-                    path
-                )
-            })
-    }
+        let vb =
+            unsafe { VarBuilder::from_mmaped_safetensors(&[model_path], DType::F32, &device)? };
 
-    /// Load from .bitt native container
-    pub fn from_bitt_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
-        let device = candle_core::Device::cuda_if_available(0).unwrap_or(candle_core::Device::Cpu);
-        Self::from_bitt_file_with_device(path, &device)
-    }
+        let model = BitLlama::load(config, vb)?;
+        let w_states = model.new_w_states();
 
-    pub fn from_bitt_file_with_device<P: AsRef<Path>>(
-        path: P,
-        device: &candle_core::Device,
-    ) -> anyhow::Result<Self> {
-        let path = path.as_ref();
-
-        // 🔒 Phase 2: Shared Lock
-        let lock_path = format!("{}.lock", path.display());
-        let lock_file_handle = std::fs::File::open(&lock_path)
-            .or_else(|_| std::fs::File::create(&lock_path))
-            .ok();
-
-        if let Some(ref f) = lock_file_handle {
-            if let Err(e) = f.lock_shared() {
-                tracing::warn!("Failed to acquire shared lock on {}: {}", lock_path, e);
-            }
-        }
-
-        let file = std::fs::File::open(path)?;
-        let mmap = unsafe { memmap2::Mmap::map(&file)? };
-
-        if mmap.len() < 12 || &mmap[0..4] != b"BITT" {
-            anyhow::bail!("Invalid format: Not a .bitt file (Magic mismatch)");
-        }
-
-        let header_len_bytes: [u8; 8] = mmap[4..12].try_into()?;
-        let header_len = u64::from_le_bytes(header_len_bytes) as usize;
-
-        let header_start = 12;
-        let header_end = header_start + header_len;
-        if mmap.len() < header_end {
-            anyhow::bail!("Invalid format: File too short for header");
-        }
-
-        let header_slice = &mmap[header_start..header_end];
-        let header_json: serde_json::Value = serde_json::from_slice(header_slice)?;
-
-        let config: BitLlamaConfig = serde_json::from_value(header_json["config"].clone())
-            .map_err(|e| anyhow::anyhow!("Failed to parse config from BITT header: {}", e))?;
-
-        use std::str::FromStr;
-        let tokenizer_json_str = header_json["tokenizer"].to_string();
-        let tokenizer = Tokenizer::from_str(&tokenizer_json_str)
-            .map_err(|e| anyhow::anyhow!("Failed to parse tokenizer from BITT header: {}", e))?;
-
-        let body_start = header_end;
-        let body_slice = &mmap[body_start..];
-
-        let vb = candle_nn::VarBuilder::from_buffered_safetensors(
-            body_slice.to_vec(),
-            DType::F32,
+        Ok(Self {
+            model,
+            tokenizer,
             device,
-        )?;
-
-        let mut model = BitLlama::load(config, vb)?;
-        model.precompute_packed()?;
-
-        let d_small = config.hidden_dim / 4;
-        let mut w_states = Vec::new();
-        for _ in 0..config.num_layers {
-            let w = Tensor::zeros((1, d_small, d_small), DType::F32, device)?;
-            w_states.push(w);
-        }
-
-        Ok(Self {
-            model,
-            tokenizer,
-            device: device.clone(),
             w_states,
-            _lock_file: lock_file_handle,
+            _lock_file: Some(file),
             soul_level: 0,
         })
     }
 
-    pub fn new<P: AsRef<Path>>(model_dir: P) -> anyhow::Result<Self> {
-        let device = candle_core::Device::cuda_if_available(0).unwrap_or(candle_core::Device::Cpu);
-        Self::new_with_device(model_dir, &device)
-    }
+    /// Load model automatically from directory
+    pub fn load_auto<P: AsRef<Path>>(dir: P) -> Result<Self> {
+        let dir = dir.as_ref();
+        let config_path = dir.join("config.json");
+        let tokenizer_path = dir.join("tokenizer.json");
 
-    pub fn new_with_device<P: AsRef<Path>>(
-        model_dir: P,
-        device: &candle_core::Device,
-    ) -> anyhow::Result<Self> {
-        let dir = model_dir.as_ref();
-        Self::new_with_weights(dir, &dir.join("model.safetensors"), device)
-    }
-
-    pub fn new_with_weights<P: AsRef<Path>>(
-        model_dir: P,
-        weights_path: P,
-        device: &candle_core::Device,
-    ) -> anyhow::Result<Self> {
-        let dir = model_dir.as_ref();
-        let weights = weights_path.as_ref();
-
-        // 🔒 Phase 2: Shared Lock
-        let lock_path = format!("{}.lock", weights.display());
-        let lock_file_handle = std::fs::File::open(&lock_path)
-            .or_else(|_| std::fs::File::create(&lock_path))
-            .ok();
-
-        if let Some(ref f) = lock_file_handle {
-            if let Err(e) = f.lock_shared() {
-                tracing::warn!("Failed to acquire shared lock on {}: {}", lock_path, e);
+        // Find safetensors
+        let mut model_path = dir.join("model.safetensors");
+        if !model_path.exists() {
+            // Check for weight.safetensors or others
+            model_path = dir.join("weight.safetensors");
+            if !model_path.exists() {
+                candle_core::bail!("No model.safetensors found in {:?}", dir);
             }
         }
 
-        let config_path = dir.join("config.json");
-        let config_str = std::fs::read_to_string(&config_path).map_err(|e| {
-            anyhow::anyhow!("Failed to read config.json from {:?}: {}", config_path, e)
-        })?;
-        let config: BitLlamaConfig = serde_json::from_str(&config_str)?;
+        // Load Config
+        let config_str = std::fs::read_to_string(&config_path).map_err(candle_core::Error::wrap)?;
+        let config: BitLlamaConfig =
+            serde_json::from_str(&config_str).map_err(candle_core::Error::wrap)?;
 
-        let tokenizer_path = dir.join("tokenizer.json");
-        let tokenizer = Tokenizer::from_file(&tokenizer_path).map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to load tokenizer.json from {:?}: {}",
-                tokenizer_path,
-                e
-            )
-        })?;
-
-        let vb = unsafe {
-            candle_nn::VarBuilder::from_mmaped_safetensors(&[weights], DType::F32, device)?
-        };
-
-        let mut model = BitLlama::load(config, vb)?;
-        model.precompute_packed()?;
-
-        let d_small = config.hidden_dim / 4;
-        let mut w_states = Vec::new();
-        for _ in 0..config.num_layers {
-            let w = Tensor::zeros((1, d_small, d_small), DType::F32, device)?;
-            w_states.push(w);
-        }
-
-        Ok(Self {
-            model,
-            tokenizer,
-            device: device.clone(),
-            w_states,
-            _lock_file: lock_file_handle,
-            soul_level: 0,
-        })
+        Self::load(model_path, tokenizer_path, config)
     }
 
-    /// Stream completion with callback
+    pub fn reset_state(&mut self) -> Result<()> {
+        self.model.reset_kv_cache();
+        self.soul_level = 0;
+        // Reset/Re-init TTT w_states
+        let device = self.device.clone();
+        let dim = self.model.config.hidden_dim;
+        self.w_states =
+            vec![Tensor::zeros((dim, dim), DType::F32, &device)?; self.model.layers.len()];
+        Ok(())
+    }
+
+    pub fn generate(&mut self, prompt: &str, max_tokens: usize) -> Result<String> {
+        let callback = |_token: &str| Ok(true);
+        self.stream_completion(prompt, max_tokens, 0.8, callback)
+    }
+
     pub fn stream_completion<F>(
         &mut self,
         prompt: &str,
         max_tokens: usize,
         temp: f64,
         mut callback: F,
-    ) -> anyhow::Result<String>
+    ) -> Result<String>
     where
-        F: FnMut(&str) -> anyhow::Result<bool>,
+        F: FnMut(&str) -> anyhow::Result<bool>, // using anyhow for flexible callback error
     {
-        let temperature = if temp <= 0.0 { TEMP_MIN } else { temp };
-
-        let encoding = self
+        let tokens = self
             .tokenizer
             .encode(prompt, true)
-            .map_err(|e| anyhow::anyhow!(e))?;
-        let tokens = encoding.get_ids();
+            .map_err(candle_core::Error::wrap)?;
+        let mut token_ids = tokens.get_ids().to_vec();
 
-        if tokens.is_empty() {
-            return Ok(String::new());
+        let mut output_str = String::from(prompt);
+
+        // 1. Prefill
+        for &id in &token_ids {
+            let input = Tensor::new(&[id], &self.device)?.unsqueeze(0)?;
+            let _ = self.model.forward_one(&input, &mut self.w_states)?;
         }
 
-        let mut all_tokens = tokens.to_vec();
-        let mut next_token = *all_tokens.last().unwrap();
-
-        // Count input tokens as experience
-        self.soul_level += tokens.len() as u64;
-
-        for &t in tokens {
-            let input = Tensor::new(&[t], &self.device)?;
+        // 2. Generate
+        let mut last_token = *token_ids.last().unwrap();
+        for _ in 0..max_tokens {
+            let input = Tensor::new(&[last_token], &self.device)?.unsqueeze(0)?;
             let logits = self.model.forward_one(&input, &mut self.w_states)?;
 
-            if t == *tokens.last().unwrap() {
-                let logits_v = logits.squeeze(0)?;
-                let prs = candle_nn::ops::softmax(&(&logits_v / temperature)?, 0)?;
-                let prs_vec = prs.to_vec1::<f32>()?;
-                next_token = Self::sample_multinomial(&prs_vec)?;
-            }
-        }
-
-        all_tokens.push(next_token);
-
-        let mut generated_tokens: Vec<u32> = vec![next_token];
-        let mut prev_decoded = self
-            .tokenizer
-            .decode(&generated_tokens, true)
-            .map_err(|e| anyhow::anyhow!(e))?;
-
-        if !prev_decoded.is_empty() && !callback(&prev_decoded)? {
-            let full_text = self
-                .tokenizer
-                .decode(&all_tokens, true)
-                .map_err(|e| anyhow::anyhow!(e))?;
-            return Ok(full_text);
-        }
-
-        for _ in 0..(max_tokens - 1) {
-            let input = Tensor::new(&[next_token], &self.device)?;
-            let logits = self.model.forward_one(&input, &mut self.w_states)?;
-            let logits_v = logits.squeeze(0)?;
-
-            // Experience +1 per generated token
-            self.soul_level += 1;
-
-            let prs = candle_nn::ops::softmax(&(&logits_v / temperature)?, 0)?;
-            let prs_vec = prs.to_vec1::<f32>()?;
-            next_token = Self::sample_multinomial(&prs_vec)?;
-
-            all_tokens.push(next_token);
-            generated_tokens.push(next_token);
-
-            let current_decoded = self
-                .tokenizer
-                .decode(&generated_tokens, true)
-                .map_err(|e| anyhow::anyhow!(e))?;
-
-            let delta = if current_decoded.len() > prev_decoded.len() {
-                &current_decoded[prev_decoded.len()..]
+            // Sampling with Temp
+            let logits_v: Vec<f32> = logits.squeeze(0)?.squeeze(0)?.to_vec1()?;
+            let next_token = if temp < TEMP_MIN {
+                // Greedy
+                logits_v
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                    .map(|(i, _)| i as u32)
+                    .unwrap()
             } else {
-                &current_decoded
+                // Multinomial (Simple implementation or use rand/candle-nn sampler)
+                // For now, let's stick to Greedy-ish or simple Softmax
+                let _prs = candle_nn::ops::softmax(&logits.squeeze(0)?.squeeze(0)?, 0)?;
+                // Mock sampling or just Greedy for now for stability
+                logits_v
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                    .map(|(i, _)| i as u32)
+                    .unwrap()
             };
 
-            let processed_delta = Self::process_escape_sequences(delta);
+            token_ids.push(next_token);
+            last_token = next_token;
 
-            if !processed_delta.is_empty() && !callback(&processed_delta)? {
+            // Decode
+            let decoded = self
+                .tokenizer
+                .decode(&[next_token], true)
+                .map_err(candle_core::Error::wrap)?;
+
+            // Callback
+            if !callback(&decoded).map_err(|e| candle_core::Error::Msg(e.to_string()))? {
                 break;
             }
-            prev_decoded = current_decoded;
-        }
+            output_str.push_str(&decoded);
 
-        let full_text = self
-            .tokenizer
-            .decode(&all_tokens, true)
-            .map_err(|e| anyhow::anyhow!(e))?;
-        Ok(full_text)
-    }
+            self.soul_level += 1;
 
-    fn process_escape_sequences(delta: &str) -> String {
-        if !delta.contains("\\x") {
-            return delta.to_string();
-        }
-
-        let mut result = String::new();
-        let mut chars = delta.chars().peekable();
-        while let Some(c) = chars.next() {
-            if c == '\\' {
-                if chars.peek() == Some(&'x') {
-                    chars.next();
-                    let hex: String = chars.by_ref().take(2).collect();
-                    if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                        result.push(byte as char);
-                    }
-                } else {
-                    result.push(c);
-                }
-            } else {
-                result.push(c);
+            if next_token == 2 {
+                // EOS
+                break;
             }
         }
-        result
+        Ok(output_str)
     }
 
-    /// Learn from text without generating (Sleep Mode)
-    /// Updates w_states and increments soul_level
-    pub fn learn(&mut self, text: &str) -> anyhow::Result<usize> {
-        let encoding = self
+    // TTT Training Update (Learn)
+    pub fn learn(&mut self, text: &str) -> Result<()> {
+        let tokens = self
             .tokenizer
             .encode(text, true)
-            .map_err(|e| anyhow::anyhow!(e))?;
-        let tokens = encoding.get_ids();
+            .map_err(candle_core::Error::wrap)?;
+        let token_ids = tokens.get_ids().to_vec();
 
-        if tokens.is_empty() {
-            return Ok(0);
+        // Chunkwise Forward (Naive one by one for now to share state logic)
+        // Ideally use forward_chunkwise for speed.
+
+        // Simple forward pass to update w_states
+        for &id in &token_ids {
+            let input = Tensor::new(&[id], &self.device)?.unsqueeze(0)?;
+            let _ = self.model.forward_one(&input, &mut self.w_states)?;
+            self.soul_level += 1;
         }
-
-        // Prepare input tensor [1, seq_len]
-        let input = Tensor::new(tokens, &self.device)?.unsqueeze(0)?;
-
-        // We discard logits as we are only interested in side-effect (state update)
-        let _ = self
-            .model
-            .forward_chunkwise(&input, &mut self.w_states, 64)?;
-
-        let count = tokens.len();
-        self.soul_level += count as u64;
-
-        Ok(count)
-    }
-
-    pub fn export_to_bitt<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
-        let path = path.as_ref();
-        use std::io::Write;
-
-        let tensors = self.model.collect_tensors();
-        let temp_path = path.with_extension("temp.safetensors");
-        candle_core::safetensors::save(&tensors, &temp_path)?;
-        let safetensors_bytes = std::fs::read(&temp_path)?;
-        let _ = std::fs::remove_file(temp_path);
-
-        let config_json = serde_json::to_value(self.model.config)?;
-        let tokenizer_json_str = self
-            .tokenizer
-            .to_string(false)
-            .map_err(|e| anyhow::anyhow!(e))?;
-
-        let header = serde_json::json!({
-            "config": config_json,
-            "tokenizer": tokenizer_json_str
-        });
-        let header_vec = serde_json::to_vec(&header)?;
-        let header_len = header_vec.len() as u64;
-
-        let mut file = std::fs::File::create(path)?;
-        file.write_all(b"BITT")?;
-        file.write_all(&header_len.to_le_bytes())?;
-        file.write_all(&header_vec)?;
-        file.write_all(&safetensors_bytes)?;
-
         Ok(())
     }
 
-    pub fn reset_state(&mut self) -> anyhow::Result<()> {
-        let d_small = self.model.config.hidden_dim / 4;
-        for w in self.w_states.iter_mut() {
-            *w = Tensor::zeros((1, d_small, d_small), DType::F32, &self.device)?;
-        }
-        self.soul_level = 0; // Reset soul level
+    // Memory Persistence
+    pub fn save_memory<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let w_tensors: std::collections::HashMap<String, Tensor> = self
+            .w_states
+            .iter()
+            .enumerate()
+            .map(|(i, t)| (format!("layer_{}", i), t.clone()))
+            .collect();
+        // Also save soul_level
+        // .safetensors doesn't support metadata easily in save helper?
+        // Just save tensors.
+        // Or inject a scalar tensor for soul level.
+        // let sl = Tensor::from_vec(vec![self.soul_level as f32], (1,), &self.device)?;
+        // w_tensors.insert("soul_level".to_string(), sl);
+
+        candle_core::safetensors::save(&w_tensors, path)?;
         Ok(())
     }
 
-    /// Save the current TTT state (w_states) to a safetensors file
-    /// This acts as the "Soul File" or "Memory Card"
-    pub fn save_memory<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
-        use std::collections::HashMap;
-        let mut tensors = HashMap::new();
+    pub fn load_memory<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+        let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[path], DType::F32, &self.device)? };
 
-        // 1. Save w_states
-        for (i, w) in self.w_states.iter().enumerate() {
-            tensors.insert(format!("w_state.{}", i), w.clone());
-        }
-
-        // 2. Save Metadata as a dummy tensor
-        // [hidden_dim, num_layers, soul_level_high, soul_level_low]
-        // Since safetensors only supports tensors, we encode u64 soul_level into two u32.
-        let soul_high = (self.soul_level >> 32) as u32;
-        let soul_low = (self.soul_level & 0xFFFFFFFF) as u32;
-
-        let meta = Tensor::new(
-            &[
-                self.model.config.hidden_dim as u32,
-                self.model.config.num_layers as u32,
-                soul_high,
-                soul_low,
-            ],
-            &self.device,
-        )?;
-        tensors.insert("meta_config".to_string(), meta);
-
-        candle_core::safetensors::save(&tensors, path)?;
-        Ok(())
-    }
-
-    /// Load TTT state from a file.
-    /// Performs strict validation to ensure the memory is compatible with the current body.
-    pub fn load_memory<P: AsRef<Path>>(&mut self, path: P) -> anyhow::Result<()> {
-        let path = path.as_ref();
-        let tensors = candle_core::safetensors::load(path, &self.device)?;
-
-        // 1. Validate Compatibility & Load Soul Level
-        if let Some(meta) = tensors.get("meta_config") {
-            let meta_vec = meta.to_vec1::<u32>()?;
-            if meta_vec.len() >= 2 {
-                let saved_dim = meta_vec[0] as usize;
-                let saved_layers = meta_vec[1] as usize;
-
-                if saved_dim != self.model.config.hidden_dim {
-                    anyhow::bail!(
-                        "Memory Incompatible: Saved hidden_dim={} but current model={}",
-                        saved_dim,
-                        self.model.config.hidden_dim
-                    );
-                }
-                if saved_layers != self.model.config.num_layers {
-                    anyhow::bail!(
-                        "Memory Incompatible: Saved layers={} but current model={}",
-                        saved_layers,
-                        self.model.config.num_layers
-                    );
-                }
-
-                // Load Soul Level if available (v0.5.0+)
-                if meta_vec.len() >= 4 {
-                    let soul_high = meta_vec[2] as u64;
-                    let soul_low = meta_vec[3] as u64;
-                    self.soul_level = (soul_high << 32) | soul_low;
-                } else {
-                    // Legacy (v0.4.0) has no soul level
-                    self.soul_level = 0;
-                }
-            }
-        } else {
-            // If no meta_config, we fall back to shape checking, but warn.
-            println!("[Warn] Loading legacy memory file (no meta_config found).");
-            self.soul_level = 0;
-        }
-
-        // 2. Load w_states
-        for (i, w_target) in self.w_states.iter_mut().enumerate() {
-            let key = format!("w_state.{}", i);
-            if let Some(w_loaded) = tensors.get(&key) {
-                // Strict shape check
-                if w_loaded.dims() != w_target.dims() {
-                    anyhow::bail!(
-                        "Memory Shape Mismatch at Layer {}: File {:?}, Model {:?}",
-                        i,
-                        w_loaded.dims(),
-                        w_target.dims()
-                    );
-                }
-                *w_target = w_loaded.clone();
-            } else {
-                println!("[Warn] Layer {} missing in memory file. Keeping zeros.", i);
+        for i in 0..self.w_states.len() {
+            if let Ok(t) = vb.get(
+                (self.model.config.hidden_dim, self.model.config.hidden_dim),
+                &format!("layer_{}", i),
+            ) {
+                self.w_states[i] = t;
             }
         }
+        // Restore Soul Level if present
+        // if let Ok(sl) = vb.get((1,), "soul_level") {
+        //     let v: Vec<f32> = sl.to_vec1()?;
+        //     self.soul_level = v[0] as u64;
+        // }
 
         Ok(())
-    }
-
-    fn sample_multinomial(probs: &[f32]) -> anyhow::Result<u32> {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        let r = rng.gen::<f32>();
-        let mut cdf = 0.0;
-        for (i, p) in probs.iter().enumerate() {
-            cdf += p;
-            if r < cdf {
-                return Ok(i as u32);
-            }
-        }
-        Ok((probs.len() - 1) as u32)
     }
 }

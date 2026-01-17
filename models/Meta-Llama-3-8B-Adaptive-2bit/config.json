@@ -1,0 +1,14 @@
+{
+    "arch": "llama",
+    "vocab_size": 128256,
+    "hidden_dim": 4096,
+    "num_layers": 32,
+    "n_heads": 32,
+    "n_kv_heads": 8,
+    "intermediate_dim": 14336,
+    "inner_lr": 0.0,
+    "n_gpu_layers": 10,
+    "rope_theta": 500000.0,
+    "max_position_embeddings": 8192,
+    "lm_head_cpu": true
+}

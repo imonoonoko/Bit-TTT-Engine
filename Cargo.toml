@@ -2,7 +2,7 @@
 
 members = [
     "crates/rust_engine",
-    "crates/bit_llama",
+    "crates/bit_llama", "crates/bit_converter",
 ]
 
 resolver = "2"

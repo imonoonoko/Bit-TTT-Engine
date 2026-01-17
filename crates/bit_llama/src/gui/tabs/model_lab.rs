@@ -81,7 +81,7 @@ pub fn render(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                             for e in entries.flatten() {
                                 let p = e.path();
                                 if p.extension()
-                                    .map_or(false, |x| x == "safetensors" || x == "bitt")
+                                    .is_some_and(|x| x == "safetensors" || x == "bitt")
                                 {
                                     spawn_args = Some((
                                         p.to_string_lossy().to_string(),
@@ -169,14 +169,12 @@ pub fn render(app: &mut BitStudioApp, ui: &mut egui::Ui) {
                             proj.log("☀ Requesting graceful wake up...");
                         }
                     }
-                } else {
-                    if ui.button("🌙 Sleep (Offline Learning)").clicked() {
-                        app.inference_session.send_message("/sleep");
-                        app.inference_session.is_dreaming = true;
-                        // Log to console only, not chat
-                        if let Some(proj) = &mut app.current_project {
-                            proj.log("💤 Entering Sleep Mode...");
-                        }
+                } else if ui.button("🌙 Sleep (Offline Learning)").clicked() {
+                    app.inference_session.send_message("/sleep");
+                    app.inference_session.is_dreaming = true;
+                    // Log to console only, not chat
+                    if let Some(proj) = &mut app.current_project {
+                        proj.log("💤 Entering Sleep Mode...");
                     }
                 }
 
