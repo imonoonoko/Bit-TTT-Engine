@@ -7,9 +7,11 @@ target/
 stop_signal
 
 # Project Specific
+# Project Specific
 # User Workspace (Refactor V2)
 workspace/
 !workspace/**/.keep
+CUDA/
 
 # Old (Kept for safety or removed locally)
 # projects/

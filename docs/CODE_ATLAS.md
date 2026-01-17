@@ -9,9 +9,16 @@ Full guide (Japanese): [DEVELOPER_GUIDE_JA.md](DEVELOPER_GUIDE_JA.md).
 - **`rust_engine`**: Core library (linear algebra, model defs).
   - `src/python.rs`: Python API.
   - `src/kernels/`: CUDA/AVX kernels.
-- **`bit_llama`**: Application.
-  - `src/gui/`: UI logic. **Points to `workspace/projects`**.
-  - `src/train/`: Training loop. **Defaults to `workspace/data`**.
+- **`bit_llama`**: Main GUI Application (Training/Chat).
+  - `src/gui/`: UI logic.
+- **`bit_converter`**: Standalone Converter Tool.
+  - `src/main.rs`: Converter GUI.
+
+### `tools/` (The Utilities)
+- **`conversion/`**: Python scripts for model conversion.
+- **`debug/`**: Benchmarking and verification scripts.
+- **`data/`**: Dataset preparation scripts.
+- **`scripts/`**: PowerShell automation wrappers.
 
 ### `workspace/` (The Data)
 user-generated content. Ignored by git.

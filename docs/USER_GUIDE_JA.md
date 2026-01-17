@@ -1,4 +1,4 @@
-# Bit-TTT Engine ユーザーガイド (v0.3.0)
+# Bit-TTT Engine ユーザーガイド (v0.3.1)
 
 このガイドでは、Bit-TTT Engine の基本的な使い方と、新機能「Model Lab」「Sleep Mode」について解説します。
 

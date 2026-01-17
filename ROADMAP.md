@@ -3,7 +3,7 @@
 ## ✅ 完了済みのフェーズ
 - **Phase 1-4**: コアエンジン (Rust), BitLinear, TTT, GUIプロトタイプ.
 - **Phase 5**: Python統合 (`cortex_rust` PyO3バインディング).
-- **Refactor V2**: ディレクトリ構造の大掃除 (`workspace/`, `dist/`).
+- **Refactor V3**: プロジェクト構造の大規模整理 (`tools/`, `docs/`, `CUDA/` etc.).
 
 ---
 
@@ -19,11 +19,11 @@
 - [x] **ベンチマーク**: 比較表 (vs Llama.cpp).
 - [ ] **デモ動画**: (ユーザーアクション待ち).
 
-## 📦 Phase 7.5: スタンドアロン変換GUI (BitConverter) [進行中]
+## 📦 Phase 7.5: スタンドアロン変換GUI (BitConverter) [完了]
 *(目標: "誰でもLlama-3を変換できる")*
-- [ ] **独立アプリ化**: `crates/bit_converter` (Rust/egui) の作成.
-- [ ] **Python連携**: `tools/convert_hb.py` をラップし、環境構築の壁を下げる.
-- [ ] **GUI**: フォルダ選択 → 変換ボタン → ログ表示 のシンプル操作.
+- [x] **独立アプリ化**: `crates/bit_converter` (Rust/egui) の作成.
+- [x] **Python連携**: `tools/conversion/convert_llama_v2.py` をラップ.
+- [x] **GUI**: フォルダ選択 → 変換ボタン → ログ表示 のシンプル操作.
 
 ---
 

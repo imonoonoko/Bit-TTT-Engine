@@ -10,7 +10,8 @@
 Bit-TTT/
 ├── crates/             # 🦀 ソースコード (Rust Workspace)
 │   ├── rust_engine/    # [Core] 計算カーネル, PyO3バインディング
-│   └── bit_llama/      # [App]  CLI, GUI, 学習ロジック
+│   ├── bit_llama/      # [App]  CLI, GUI, 学習ロジック
+│   └── bit_converter/  # [Tool] スタンドアロン変換GUI (New!)
 │
 ├── workspace/          # 👤 ユーザー領域 (Git除外)
 │   ├── projects/       # GUIプロジェクトデータ
@@ -27,8 +28,10 @@ Bit-TTT/
 │   └── archives/       # 配布用パッケージ (.zip)
 │
 ├── tools/              # 🛠️ 開発・運用スクリプト
-│   ├── benchmarks/     # パフォーマンス測定
-│   └── utils/          # ユーティリティ
+│   ├── conversion/     # モデル変換
+│   ├── debug/          # 検証・ベンチマーク
+│   ├── data/           # データ準備
+│   └── scripts/        # PowerShellラッパー (start_gui.bat等)
 │
 └── docs/               # 📚 ドキュメント
     ├── archive/        # 過去ログ

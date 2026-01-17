@@ -1,6 +1,16 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [v0.3.1] - 2026-01-18
+**Project Cleanup & Bit-Converter Release**
+
+### 🧩 New Tooling
+- **Standalone Converter**: Released `crates/bit_converter` (GUI) and associated python wrappers.
+- **Tools Reorganization**: Moved all scripts from root to `tools/conversion`, `tools/debug`, `tools/data`, `tools/scripts`.
+
+### 🧹 Refactoring
+- **Project Structure**: Cleaned up `docs/`, `workspace/`, and root directory.
+- **Git Hygiene**: Updated `.gitignore` to strictly exclude loose binaries (`*.pyd`, `CUDA/`).
+
 
 ## [v0.2.0] - 2026-01-14
 **Python Integration & Architecture Upgrade Release**

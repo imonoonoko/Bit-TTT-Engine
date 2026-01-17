@@ -9,7 +9,7 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 [![Build Status](https://github.com/imonoonoko/Bit-TTT-Engine/actions/workflows/rust.yml/badge.svg)](https://github.com/imonoonoko/Bit-TTT-Engine/actions)
 
 **1.58-bit Quantization + Test-Time Training (TTT)** Implementation in Pure Rust.
-**Current Version: v0.3.0 (Model Lab Update)**
+**Current Version: v0.3.1 (Refactor & Bit-Converter)**
 
 [日本語 / Japanese](README_JA.md) | [📖 User Guide](docs/USER_GUIDE.md)
 
@@ -22,11 +22,11 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 
 ---
 
-## 🚀 v0.3.0 New Features: Model Lab & Sleep Mode
+## 🚀 v0.3.1 New Features: Bit-Converter & Cleanup
 
+*   **🔄 Bit-Converter**: Standalone GUI tool to convert HuggingFace Llama models to Bit-TTT format.
+*   **🛠️ Refactored Tools**: Organized utility scripts into `conversion`, `debug`, `data`, and `scripts` categories.
 *   **🔬 Model Lab**: Dedicated tab for managing Model Loading and "Soul (.soul)" persistence.
-*   **🌙 Sleep Mode**: Consolidates short-term memory into long-term memory by "dreaming" (fast replay learning) conversation logs.
-*   **💬 Chat UI**: Separated system logs to focus purely on conversation.
 
 ---
 
@@ -81,15 +81,22 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 
 ```text
 Bit-TTT/
-├── crates/             # The Code (Rust)
+├── crates/
+│   ├── rust_engine/    # 🧠 Core Inference Engine
+│   ├── bit_llama/      # 🖥️ Main GUI (BitLlamaStudio)
+│   └── bit_converter/  # 🔄 Standalone Converter (New!)
+├── tools/              # 🛠️ Utilities
+│   ├── conversion/     # Model Conversion Scripts
+│   ├── debug/          # Benchmarking & Verification
+│   ├── data/           # Dataset Prep
+│   └── scripts/        # Automation (Powershell)
 ├── workspace/          # User Data (Projects, Models, Memories)
-│   ├── projects/       # Project Configs
-│   ├── models/         # Model Files (.safetensors)
-│   └── memories/       # Conversation Logs (.jsonl)
 ├── assets/             # Defaults & Configs
 ├── dist/               # Binaries
-└── docs/               # Docs (User Guide, Specifications)
+└── docs/               # Documentation
 ```
+
+---
 
 ## 🛠️ Development
 
@@ -97,7 +104,10 @@ Bit-TTT/
 ```bash
 git clone https://github.com/imonoonoko/Bit-TTT-Engine.git
 cd Bit-TTT-Engine
+# Build Main Engine & GUI
 cargo build --release -p bit_llama --features cuda
+# Build Converter
+cargo build --release -p bit_converter
 ```
 
 ### Python Bindings
@@ -109,6 +119,7 @@ maturin develop --release
 ---
 
 ## 📖 Documentation maps
+- **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)**: File Organization.
 - **[DEVELOPER_GUIDE_JA.md](docs/DEVELOPER_GUIDE_JA.md)**: Deep Dive (Japanese).
 - **[CODE_ATLAS.md](docs/CODE_ATLAS.md)**: Architecture Map.
 - **[ROADMAP.md](ROADMAP.md)**: Future Plans.

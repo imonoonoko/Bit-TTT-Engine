@@ -9,7 +9,7 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 [![Build Status](https://github.com/imonoonoko/Bit-TTT-Engine/actions/workflows/rust.yml/badge.svg)](https://github.com/imonoonoko/Bit-TTT-Engine/actions)
 
 **Pure Rustによる「1.58ビット量子化 + Test-Time Training (TTT)」実装**
-**Current Version: v0.3.0 (Model Lab Update)**
+**Current Version: v0.3.1 (Refactor & Bit-Converter)**
 
 [English / 英語](README.md) | [📖 ユーザーガイド (User Guide)](docs/USER_GUIDE_JA.md)
 
@@ -22,11 +22,11 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 
 ---
 
-## 🚀 v0.3.0 新機能: Model Lab & Sleep Mode
+## 🚀 v0.3.1 新機能: Bit-Converter & Cleanup
 
+*   **🔄 Bit-Converter**: HuggingFace LlamaモデルをBit-TTT形式に変換する独立したGUIツール。
+*   **🛠️ リファクタリング**: `tools/` 内のスクリプトを整理し、プロジェクト全体をクリーンアップ。
 *   **🔬 Model Lab**: モデルロードと「魂 (.soul)」の管理専用タブ。
-*   **🌙 Sleep Mode**: 会話ログを夢で見ながら（高速リプレイ学習）、短期記憶を長期記憶へ定着させる機能。
-*   **💬 Chat UI**: システムログを分離し、純粋な会話のみを楽しめるように改善。
 
 ---
 
@@ -81,14 +81,19 @@ On-chain data powered by [![GeckoTerminal](docs/images/image-2.png)](https://www
 
 ```text
 Bit-TTT/
-├── crates/             # ソースコード (Rust)
+├── crates/
+│   ├── rust_engine/    # 🧠 推論コアエンジン
+│   ├── bit_llama/      # 🖥️ メインGUI (BitLlamaStudio)
+│   └── bit_converter/  # 🔄 独立変換ツール (New!)
+├── tools/              # 🛠️ ユーティリティ
+│   ├── conversion/     # 変換スクリプト
+│   ├── debug/          # 検証・ベンチマーク
+│   ├── data/           # データセット準備
+│   └── scripts/        # 自動化スクリプト (Powershell)
 ├── workspace/          # ユーザーデータ (Project, Model, Memories)
-│   ├── projects/       # プロジェクト設定
-│   ├── models/         # モデルファイル (.safetensors)
-│   └── memories/       # 会話ログ (.jsonl)
 ├── assets/             # デフォルト設定・プリセット
 ├── dist/               # 配布用バイナリ
-└── docs/               # ドキュメント (User Guide, Specifications)
+└── docs/               # ドキュメント
 ```
 
 ## 🛠️ 開発者向け
@@ -97,7 +102,10 @@ Bit-TTT/
 ```bash
 git clone https://github.com/imonoonoko/Bit-TTT-Engine.git
 cd Bit-TTT-Engine
+# メインエンジン & GUIのビルド
 cargo build --release -p bit_llama --features cuda
+# コンバーターのビルド
+cargo build --release -p bit_converter
 ```
 
 ### Pythonバインディング開発
